@@ -100,12 +100,11 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* i
 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 	if (!nvse->isEditor) {
+		SafeWrite8(0xB575AA, 0x75); // Prevent shader package destruction to allow shader reloading
 
 		if (!GetModuleHandle("NewVegasReloaded.dll")) {
 			WriteRelJump(0xBE0FE0, BSShader::CreateVertexShaderEx);
 			WriteRelJump(0xBE1750, BSShader::CreatePixelShaderEx);
-
-			SafeWrite8(0xB575AA, 0x75); // Prevent shader package destruction to allow shader reloading
 		}
 		else {
 			_MESSAGE("New Vegas Reloaded detected, skipping shader loader");
