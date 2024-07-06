@@ -38,6 +38,8 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 	if (!pShaderData) {
 		if (bFreeMem)
 			MemoryManager::Deallocate(pShaderData);
+
+		_MESSAGE("Failed to find %s", apFilename);
 		return nullptr;
 	}
 
