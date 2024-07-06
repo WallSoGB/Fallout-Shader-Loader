@@ -28,15 +28,11 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 
 	if (!pShaderData) {
 		BSShaderManager::ShaderPackage* pShaderPkg = BSShaderManager::ShaderPackage::GetSingleton();
-
-		if (!pShaderPkg) {
-			if (bFreeMem)
-				MemoryManager::Deallocate(pShaderData);
-			return nullptr;
+		if (pShaderPkg) {
+			BSShaderManager::ShaderPackage::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
+			if (pRaw)
+				pShaderData = &pRaw->shader;
 		}
-
-		BSShaderManager::ShaderPackage::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
-		pShaderData = &pRaw->shader;
 	}
 
 	if (!pShaderData) {
