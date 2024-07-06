@@ -94,7 +94,7 @@ EXTERN_DLL_EXPORT NiD3DVertexShader* CreateVertexShader(const char* apFilename) 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 100;
+	info->version = 110;
 	return true;
 }
 
