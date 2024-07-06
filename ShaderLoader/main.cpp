@@ -12,8 +12,9 @@ template <typename FUNC>
 void* CreateShader(const char* apFilename, FUNC aFunc) {
 	DWORD* pShaderData = nullptr;
 	bool bFreeMem = false;
-	std::string sDataPath = std::format("Data\\Shaders\\Loose\\{}", apFilename);
-	BSFile* pFile = FileFinder::GetFile(sDataPath.data(), NiFile::READ_ONLY, 0x4000, ARCHIVE_TYPE_SHADERS);
+	char cPath[MAX_PATH];
+	sprintf_s(cPath, "Data\\Shaders\\Loose\\%s", apFilename);
+	BSFile* pFile = FileFinder::GetFile(cPath, NiFile::READ_ONLY, 0x4000, ARCHIVE_TYPE_SHADERS);
 	if (pFile && pFile->m_bGood) {
 		_MESSAGE("Loaded %s", apFilename);
 		UInt32 uiSize = 0;
