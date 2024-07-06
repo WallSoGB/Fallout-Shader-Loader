@@ -353,7 +353,15 @@ public:
 	NiGPUProgram();
 	virtual ~NiGPUProgram();
 
-	UInt32 m_eProgramType;
+	union {
+		UInt32				m_eProgramType;
+
+		struct {
+			UInt8				ucProgramType;
+			UInt8				empty[2];
+			bool				bEnabled;
+		}; // NVR
+	};
 };
 
 class NiD3DShaderProgram : public NiGPUProgram {
@@ -392,10 +400,16 @@ public:
 	virtual bool						SetShaderConstantArray(NiShaderConstantMapEntry* pkEntry, const void* pvDataSource, UInt32 uiNumEntries, UInt32 uiRegistersPerEntry, UInt16* pusReorderArray);
 
 	char*						m_pszName;
-	char*						m_pszShaderProgramName;
-	UInt32						m_uiCodeSize;
-	void*						m_pvCode;
-	NiD3DShaderProgramCreator*	m_pkCreator;
+	union {
+		char*						m_pszShaderProgramName;
+		UInt32						m_uiCodeSize;
+		void*						m_pvCode;
+		NiD3DShaderProgramCreator*	m_pkCreator;
+		struct {
+			void*		ShaderProg[3];
+			IUnknown*	pShaderHandleBackup;
+		}; // NVR
+	};
 	LPDIRECT3DDEVICE9			m_pkD3DDevice;
 	NiDX9Renderer*				m_pkD3DRenderer;
 	NiD3DRenderState*			m_pkD3DRenderState;

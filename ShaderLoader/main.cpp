@@ -8,6 +8,10 @@
 
 IDebugLog	   gLog("logs\\ShaderLoader.log");
 
+static bool bNVRPresent = false;
+static NVSEMessagingInterface* pNVSEMessaging = nullptr;
+static PluginHandle uiPluginHandle = 0;
+
 template <typename FUNC>
 void* CreateShader(const char* apFilename, FUNC aFunc) {
 	DWORD* pShaderData = nullptr;
@@ -63,6 +67,11 @@ NiD3DVertexShader* __fastcall BSShader::CreateVertexShaderEx(BSShader* apThis, v
 			pVertexShader = NiD3DVertexShader::Create(pRenderer);
 			pVertexShader->SetShaderHandle(pShader);
 			pVertexShader->SetName(apFilename);
+
+			if (bNVRPresent) {
+				pVertexShader->bEnabled = true;
+				pVertexShader->pShaderHandleBackup = pShader;
+			}
 		}
 		return pVertexShader;
 	});
@@ -78,9 +87,26 @@ NiD3DPixelShader* __fastcall BSShader::CreatePixelShaderEx(BSShader* apThis, voi
 			pPixelShader = NiD3DPixelShader::Create(pRenderer);
 			pPixelShader->SetShaderHandle(pShader);
 			pPixelShader->SetName(apFilename);
+
+			if (bNVRPresent) {
+				pPixelShader->bEnabled = true;
+				pPixelShader->pShaderHandleBackup = pShader;
+			}
 		}
 		return pPixelShader;
 	});
+}
+
+enum ShaderLoaderMessages {
+	SL_ShaderRefresh = 0 // Sent on RefreshShaders
+};
+
+static void __cdecl BSShaderManager__ReloadShaders() {
+	CdeclCall(0xB557D0);
+	if (pNVSEMessaging) {
+		_MESSAGE("Reloading shaders");
+		pNVSEMessaging->Dispatch(uiPluginHandle, SL_ShaderRefresh, nullptr, 0, nullptr);
+	}
 }
 
 EXTERN_DLL_EXPORT NiD3DPixelShader* CreatePixelShader(const char* apFilename) {
@@ -94,7 +120,7 @@ EXTERN_DLL_EXPORT NiD3DVertexShader* CreateVertexShader(const char* apFilename) 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 110;
+	info->version = 120;
 	return true;
 }
 
@@ -107,8 +133,15 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 			WriteRelJump(0xBE1750, BSShader::CreatePixelShaderEx);
 		}
 		else {
-			_MESSAGE("New Vegas Reloaded detected, skipping shader loader");
+			_MESSAGE("New Vegas Reloaded detected, skipping hooks");
+			bNVRPresent = true;
 		}
+
+		for (UInt32 uiAddr : {0x5BF43C, 0x5C5A39})
+			ReplaceCall(uiAddr, BSShaderManager__ReloadShaders);
+
+		pNVSEMessaging = (NVSEMessagingInterface*)nvse->QueryInterface(kInterface_Messaging);
+		uiPluginHandle = nvse->GetPluginHandle();
 	}
 
 	return true;
