@@ -16,7 +16,7 @@
 #include "SafeWrite/SafeWrite.hpp"
 #include "Utils/Bitfield.hpp"
 
-#define SUPPORT_GECK 0
+#define SUPPORT_GECK 1
 
 #if SUPPORT_GECK
 static bool	bGECK = false;

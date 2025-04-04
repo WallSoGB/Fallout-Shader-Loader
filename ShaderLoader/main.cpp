@@ -110,6 +110,16 @@ static void __cdecl BSShaderManager__ReloadShaders() {
 	BSShaderManager::DestroyShaderBuffer();
 }
 
+static void GECKMessageHandler(NVSEMessagingInterface::Message* apMessage) {
+	switch(apMessage->type){
+	case NVSEMessagingInterface::kMessage_PostPostLoad:
+		// Undo extender's shader buffer destruction patch
+		SafeWrite8(0x9001F8, 0x75);
+		SafeWrite8(0x9002AA, 0x75);
+		break;
+	}
+}
+
 EXTERN_DLL_EXPORT NiD3DPixelShader* CreatePixelShader(const char* apFilename) {
 	return BSShader::CreatePixelShaderEx(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
 }
@@ -121,7 +131,7 @@ EXTERN_DLL_EXPORT NiD3DVertexShader* CreateVertexShader(const char* apFilename) 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 130;
+	info->version = 131;
 
 #if SUPPORT_GECK
 	bGECK = nvse->isEditor;
@@ -134,10 +144,15 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* i
 EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 	_MESSAGE("Initializing in %s", bGECK ? "GECK" : "Game");
 
+	pNVSEMessaging = (NVSEMessagingInterface*)nvse->QueryInterface(kInterface_Messaging);
+	uiPluginHandle = nvse->GetPluginHandle();
+
 	if (bGECK) {
 		WriteRelJump(0x975910, BSShader::CreateVertexShaderEx);
 		WriteRelJump(0x976080, BSShader::CreatePixelShaderEx);
 		ReplaceCall(0x44E92F, BSShaderManager__ReloadShaders);
+
+		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", GECKMessageHandler);
 	}
 	else {
 		bNVRPresent = GetModuleHandle("NewVegasReloaded.dll") != nullptr;
@@ -147,9 +162,6 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 
 		for (uint32_t uiAddr : {0x5BF43C, 0x5C5A39})
 			ReplaceCall(uiAddr, BSShaderManager__ReloadShaders);
-
-		pNVSEMessaging = (NVSEMessagingInterface*)nvse->QueryInterface(kInterface_Messaging);
-		uiPluginHandle = nvse->GetPluginHandle();
 	}
 
 	return true;
