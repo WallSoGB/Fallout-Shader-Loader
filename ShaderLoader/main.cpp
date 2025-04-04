@@ -134,11 +134,13 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* i
 	info->version = 131;
 
 #if SUPPORT_GECK
-	bGECK = nvse->isEditor;
-	return true;
+	if (nvse)
+		bGECK = nvse->isEditor;
 #else
-	return !nvse->isEditor;
+	if (nvse)
+		return !nvse->isEditor;
 #endif
+	return true;
 }
 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
