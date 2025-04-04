@@ -49,6 +49,8 @@ public:
 	static void			SetPrintLevel(LogLevel in) { printLevel = in; }
 
 private:
+	static void			MakeAllDirs(const char* path);
+
 	static void			PrintSpaces(int numSpaces);
 	static void			PrintText(const char* buf);
 	static void			NewLine(void);

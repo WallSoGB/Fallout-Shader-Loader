@@ -1,16 +1,14 @@
-#include "d3d9.h"
-#include "format"
 #include "GameData.hpp"
 #include "nvse/PluginAPI.h"
-#include "SafeWrite.h"
+#include "shared/Utils/DebugLog.hpp"
 
-#define EXTERN_DLL_EXPORT extern "C" __declspec(dllexport)
+BS_ALLOCATORS;
 
 IDebugLog	   gLog("logs\\ShaderLoader.log");
 
-static bool bNVRPresent = false;
-static NVSEMessagingInterface* pNVSEMessaging = nullptr;
-static PluginHandle uiPluginHandle = 0;
+static bool						bNVRPresent = false;
+static NVSEMessagingInterface*	pNVSEMessaging = nullptr;
+static PluginHandle				uiPluginHandle = 0;
 
 template <typename FUNC>
 void* CreateShader(const char* apFilename, FUNC aFunc) {
@@ -21,10 +19,10 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 	BSFile* pFile = FileFinder::GetFile(cPath, NiFile::READ_ONLY, 0x4000, ARCHIVE_TYPE_SHADERS);
 	if (pFile && pFile->m_bGood) {
 		_MESSAGE("Loaded %s", apFilename);
-		UInt32 uiSize = 0;
+		uint32_t uiSize = 0;
 
 		uiSize = pFile->GetSize();
-		pShaderData = static_cast<DWORD*>(MemoryManager::Allocate(uiSize));
+		pShaderData = new DWORD[uiSize];
 		bFreeMem = true;
 
 		pFile->ReadBuffer(pShaderData, uiSize);
@@ -32,9 +30,9 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 	}
 
 	if (!pShaderData) {
-		BSShaderManager::ShaderPackage* pShaderPkg = BSShaderManager::ShaderPackage::GetSingleton();
+		ShaderBuffer* pShaderPkg = BSShaderManager::GetShaderBuffer();
 		if (pShaderPkg) {
-			BSShaderManager::ShaderPackage::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
+			ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
 			if (pRaw)
 				pShaderData = &pRaw->shader;
 		}
@@ -42,7 +40,7 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 
 	if (!pShaderData) {
 		if (bFreeMem)
-			MemoryManager::Deallocate(pShaderData);
+			delete[] pShaderData;
 
 		_MESSAGE("Failed to find %s", apFilename);
 		return nullptr;
@@ -52,7 +50,7 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 	void* pNiShader = aFunc(pShaderData);
 
 	if (bFreeMem)
-		MemoryManager::Deallocate(pShaderData);
+		delete[] pShaderData;
 
 	return pNiShader;
 }
@@ -102,11 +100,14 @@ enum ShaderLoaderMessages {
 };
 
 static void __cdecl BSShaderManager__ReloadShaders() {
-	CdeclCall(0xB557D0);
+	ShaderBuffer* pBuffer = BSShaderManager::CreateShaderBuffer();
+	pBuffer->Load(pBuffer->pPackagePath);
+	CdeclCall(bGECK ? 0x8FE4A0 : 0xB557D0);
 	if (pNVSEMessaging) {
 		_MESSAGE("Reloading shaders");
 		pNVSEMessaging->Dispatch(uiPluginHandle, SL_ShaderRefresh, nullptr, 0, nullptr);
 	}
+	BSShaderManager::DestroyShaderBuffer();
 }
 
 EXTERN_DLL_EXPORT NiD3DPixelShader* CreatePixelShader(const char* apFilename) {
@@ -120,24 +121,31 @@ EXTERN_DLL_EXPORT NiD3DVertexShader* CreateVertexShader(const char* apFilename) 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 120;
+	info->version = 130;
+
+#if SUPPORT_GECK
+	bGECK = nvse->isEditor;
 	return true;
+#else
+	return !nvse->isEditor;
+#endif
 }
 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
-	if (!nvse->isEditor) {
-		SafeWrite8(0xB575AA, 0x75); // Prevent shader package destruction to allow shader reloading
+	_MESSAGE("Initializing in %s", bGECK ? "GECK" : "Game");
 
-		if (!GetModuleHandle("NewVegasReloaded.dll")) {
-			WriteRelJump(0xBE0FE0, BSShader::CreateVertexShaderEx);
-			WriteRelJump(0xBE1750, BSShader::CreatePixelShaderEx);
-		}
-		else {
-			_MESSAGE("New Vegas Reloaded detected, skipping hooks");
-			bNVRPresent = true;
-		}
+	if (bGECK) {
+		WriteRelJump(0x975910, BSShader::CreateVertexShaderEx);
+		WriteRelJump(0x976080, BSShader::CreatePixelShaderEx);
+		ReplaceCall(0x44E92F, BSShaderManager__ReloadShaders);
+	}
+	else {
+		bNVRPresent = GetModuleHandle("NewVegasReloaded.dll") != nullptr;
 
-		for (UInt32 uiAddr : {0x5BF43C, 0x5C5A39})
+		WriteRelJump(0xBE0FE0, BSShader::CreateVertexShaderEx);
+		WriteRelJump(0xBE1750, BSShader::CreatePixelShaderEx);
+
+		for (uint32_t uiAddr : {0x5BF43C, 0x5C5A39})
 			ReplaceCall(uiAddr, BSShaderManager__ReloadShaders);
 
 		pNVSEMessaging = (NVSEMessagingInterface*)nvse->QueryInterface(kInterface_Messaging);
@@ -145,4 +153,13 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 	}
 
 	return true;
+}
+
+BOOL WINAPI DllMain(
+	HANDLE  hDllHandle,
+	DWORD   dwReason,
+	LPVOID  lpreserved
+)
+{
+	return TRUE;
 }

@@ -1,21 +1,35 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="nvse">
-      <UniqueIdentifier>{92a4f350-f2ec-4fca-bdd3-927732d91b34}</UniqueIdentifier>
+    <Filter Include="shared">
+      <UniqueIdentifier>{0431172a-806f-42f0-94f5-a32586d30990}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\nvse\nvse\SafeWrite.cpp">
-      <Filter>nvse</Filter>
-    </ClCompile>
-    <ClCompile Include="dllmain.c" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="..\shared\Utils\DebugLog.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\SafeWrite\SafeWrite.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\Allocator\BSMemory.cpp">
+      <Filter>shared</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\nvse\nvse\SafeWrite.h">
-      <Filter>nvse</Filter>
-    </ClInclude>
     <ClInclude Include="GameData.hpp" />
+    <ClInclude Include="..\shared\Utils\DebugLog.hpp">
+      <Filter>shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\SafeWrite\SafeWrite.hpp">
+      <Filter>shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\Defines.hpp">
+      <Filter>shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\Allocator\BSMemory.hpp">
+      <Filter>shared</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

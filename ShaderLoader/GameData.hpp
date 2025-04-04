@@ -1,17 +1,5 @@
 #pragma once
 
-#include "SafeWrite.h"
-#include "Utilities.h"
-
-#define ASSERT_SIZE(a, b) static_assert(sizeof(a) == b, "Wrong structure size!");
-#define ASSERT_OFFSET(a, b, c) static_assert(offsetof(a, b) == c, "Wrong member offset!");
-#define CREATE_OBJECT(CLASS, ADDRESS) static CLASS* CreateObject() { return StdCall<CLASS*>(ADDRESS); };
-#ifdef FO3
-#define IS_NODE(object) ((*(UInt32**)object)[3 * 4 >> 2] == 0xAA2340)
-#else
-#define IS_NODE(object) ((*(UInt32**)object)[3 * 4 >> 2] == 0x6815C0)
-#endif
-
 class BGSDistantObjectBlock;
 class bhkBlendCollisionObject;
 class bhkCollisionObject;
@@ -69,27 +57,6 @@ class NiD3DShaderProgramCreator;
 class NiShaderConstantMapEntry;
 class NiD3DRenderState;
 
-static void* NiNew(size_t stSize) {
-	return CdeclCall<void*>(0xAA13E0, stSize);
-}
-
-template <typename T_Data>
-static T_Data* NiNew() {
-	return (T_Data*)NiNew(sizeof(T_Data));
-}
-
-template <typename T, const UInt32 ConstructorPtr = 0, typename... Args>
-T* NiCreate(Args &&... args) {
-	auto* alloc = NiNew(sizeof(T));
-	if constexpr (ConstructorPtr) {
-		ThisStdCall(ConstructorPtr, alloc, std::forward<Args>(args)...);
-	}
-	else {
-		memset(alloc, 0, sizeof(T));
-	}
-	return static_cast<T*>(alloc);
-}
-
 class NiMatrix3 {
 public:
 	float m_pEntry[3][3];
@@ -130,11 +97,11 @@ class NiTArray {
 public:
 	virtual ~NiTArray();
 
-	T_Data* m_pBase;
-	UInt16 m_usMaxSize;
-	UInt16 m_usSize;
-	UInt16 m_usESize;
-	UInt16 m_usGrowBy;
+	T_Data*  m_pBase;
+	uint16_t m_usMaxSize;
+	uint16_t m_usSize;
+	uint16_t m_usESize;
+	uint16_t m_usGrowBy;
 };
 
 ASSERT_SIZE(NiTArray<void*>, 0x10);
@@ -154,9 +121,9 @@ class NiTListBase {
 public:
 	NiTListItem<T_Data>*	m_pkHead;
 	NiTListItem<T_Data>*	m_pkTail;
-	UInt32					m_uiCount;
+	uint32_t				m_uiCount;
 
-	inline UInt32 GetSize() const { return m_uiCount; };
+	inline uint32_t GetSize() const { return m_uiCount; };
 	bool IsEmpty() const { return m_uiCount == 0; };
 
 	NiTListIterator GetHeadPos() const { return m_pkHead; };
@@ -219,7 +186,7 @@ public:
     virtual			~NiRefObject();
     virtual void	DeleteThis();
 
-    UInt32 m_uiRefCount;
+    uint32_t m_uiRefCount;
 
     // 0x40F6E0
     inline void IncRefCount() {
@@ -268,23 +235,14 @@ public:
 	virtual NiObjectGroup*				GetGroup();														// 32 | Used by geometry data
 	virtual void						SetGroup(NiObjectGroup* apGroup);								// 33 | Used by geometry data
 	virtual NiControllerManager*		IsControllerManager() const;									// 34 | Returns this if it's a NiControllerManager, otherwise nullptr
-
-	// 0x6532C0
-	bool IsKindOf(const NiRTTI& apRTTI) const {
-		for (const NiRTTI* i = GetRTTI(); i; i = i->m_pkBaseRTTI) {
-			if (i == &apRTTI)
-				return true;
-		}
-		return false;
-	}
 };
 class NiObjectNET : public NiObject {
 public:
 	const char*						m_kName;
 	NiPointer<NiTimeController>		m_spControllers;
 	void**							m_ppkExtra;
-	UInt16							m_usExtraDataSize;
-	UInt16							m_usMaxSize;
+	uint16_t						m_usExtraDataSize;
+	uint16_t						m_usMaxSize;
 };
 
 class NiAVObject : public NiObjectNET {
@@ -295,9 +253,9 @@ public:
 	virtual NiAVObject*		GetObject_(const NiFixedString& kName);
 	virtual NiAVObject*		GetObjectByName(const NiFixedString& kName);
 	virtual void			SetSelectiveUpdateFlags(bool* bSelectiveUpdate, bool bSelectiveUpdateTransforms, bool* bRigid);
-	virtual void			UpdateDownwardPass(const NiUpdateData& arData, UInt32 uFlags);
-	virtual void			UpdateSelectedDownwardPass(const NiUpdateData& arData, UInt32 uFlags);
-	virtual void			UpdateRigidDownwardPass(const NiUpdateData& arData, UInt32 uFlags);
+	virtual void			UpdateDownwardPass(const NiUpdateData& arData, uint32_t uFlags);
+	virtual void			UpdateSelectedDownwardPass(const NiUpdateData& arData, uint32_t uFlags);
+	virtual void			UpdateRigidDownwardPass(const NiUpdateData& arData, uint32_t uFlags);
 	virtual void			Unk_46(void* arg);
 	virtual void			UpdateTransform();
 	virtual void			UpdateWorldData(const NiUpdateData& arData);
@@ -322,26 +280,26 @@ public:
 class NiNode : public NiAVObject {
 public:
 	virtual void			AttachChild(NiAVObject* apChild, bool abFirstAvail);
-	virtual void			InsertChildAt(UInt32 i, NiAVObject* apChild);
+	virtual void			InsertChildAt(uint32_t i, NiAVObject* apChild);
 	virtual void			DetachChild(NiAVObject* apChild, NiAVObject*& aspAVObject);
 	virtual void			DetachChildAlt(NiAVObject* apChild);
-	virtual void			DetachChildAt(UInt32 i, NiAVObject*& aspAVObject);
-	virtual NiAVObject*		DetachChildAtAlt(UInt32 i);
-	virtual void			SetAt(UInt32 i, NiAVObject* apChild, NiAVObject*& aspAVObject);
-	virtual void			SetAtAlt(UInt32 i, NiAVObject* apChild);
+	virtual void			DetachChildAt(uint32_t i, NiAVObject*& aspAVObject);
+	virtual NiAVObject*		DetachChildAtAlt(uint32_t i);
+	virtual void			SetAt(uint32_t i, NiAVObject* apChild, NiAVObject*& aspAVObject);
+	virtual void			SetAtAlt(uint32_t i, NiAVObject* apChild);
 	virtual void			UpdateUpwardPass();
 
 	NiTArray<NiAVObject*> m_kChildren;
 
-    UInt32 GetChildCount() const {
+    uint32_t GetChildCount() const {
 		return m_kChildren.m_usESize;
     }
 
-	UInt32 GetArrayCount() const {
+	uint32_t GetArrayCount() const {
 		return m_kChildren.m_usSize;
 	}
 
-	NiAVObject* GetAt(UInt32 index) const {
+	NiAVObject* GetAt(uint32_t index) const {
 		return m_kChildren.m_pBase[index];
 	}
 };
@@ -354,11 +312,11 @@ public:
 	virtual ~NiGPUProgram();
 
 	union {
-		UInt32				m_eProgramType;
+		uint32_t				m_eProgramType;
 
 		struct {
-			UInt8				ucProgramType;
-			UInt8				empty[2];
+			uint8_t				ucProgramType;
+			uint8_t				empty[2];
 			bool				bEnabled;
 		}; // NVR
 	};
@@ -385,24 +343,24 @@ public:
 	virtual bhkBlendCollisionObject*	IsBhkBlendCollisionObject();
 	virtual bhkRigidBody*				IsBhkRigidBody();
 	virtual bhkLimitedHingeConstraint*	IsBhkLimitedHingeConstraint();
-	virtual UInt32						GetVariableCount();
+	virtual uint32_t					GetVariableCount();
 	virtual const char*					GetVariableName();
 	virtual const char*					GetName();
 	virtual const char*					SetName(const char* pszName);
 	virtual char*						GetShaderProgramName();
 	virtual void						SetShaderProgramName(const char* pszName);
-	virtual UInt32						GetCodeSize();
+	virtual uint32_t					GetCodeSize();
 	virtual void*						GetCode();
-	virtual void						SetCode(UInt32 uiSize, void* pvCode);
+	virtual void						SetCode(uint32_t uiSize, void* pvCode);
 	virtual NiD3DShaderProgramCreator*	GetCreator();
 	virtual void						SetCreator(NiD3DShaderProgramCreator* pkCreator);
-	virtual void						SetShaderConstant(NiShaderConstantMapEntry*, const void*, UInt32);
-	virtual bool						SetShaderConstantArray(NiShaderConstantMapEntry* pkEntry, const void* pvDataSource, UInt32 uiNumEntries, UInt32 uiRegistersPerEntry, UInt16* pusReorderArray);
+	virtual void						SetShaderConstant(NiShaderConstantMapEntry*, const void*, uint32_t);
+	virtual bool						SetShaderConstantArray(NiShaderConstantMapEntry* pkEntry, const void* pvDataSource, uint32_t uiNumEntries, uint32_t uiRegistersPerEntry, uint16_t* pusReorderArray);
 
 	char*						m_pszName;
 	union {
 		char*						m_pszShaderProgramName;
-		UInt32						m_uiCodeSize;
+		uint32_t					m_uiCodeSize;
 		void*						m_pvCode;
 		NiD3DShaderProgramCreator*	m_pkCreator;
 		struct {
@@ -425,14 +383,17 @@ public:
 	LPDIRECT3DPIXELSHADER9 m_hShader;
 
 	static NiD3DPixelShader* Create(NiDX9Renderer* apRenderer) {
-		return NiCreate<NiD3DPixelShader, 0xBE08F0>(apRenderer);
+		if (bGECK)
+			return BSCreate<NiD3DPixelShader, 0x975260>(apRenderer);
+		else
+			return BSCreate<NiD3DPixelShader, 0xBE08F0>(apRenderer);
 	}
 };
 
 class NiD3DVertexShader : public NiD3DShaderProgram {
 public:
-	virtual UInt32						GetUsage();
-	virtual void						SetUsage(UInt32 uiUsage);
+	virtual uint32_t					GetUsage();
+	virtual void						SetUsage(uint32_t uiUsage);
 	virtual LPDIRECT3DVERTEXSHADER9		GetShaderHandle();
 	virtual void						SetShaderHandle(LPDIRECT3DVERTEXSHADER9 hShader);
 	virtual LPDIRECT3DVERTEXSHADER9		GetVertexDeclaration();
@@ -443,12 +404,16 @@ public:
 	virtual void						RecreateRendererData();
 
 	bool							m_bSoftwareVP;
-	UInt32							m_uiUsage;
+	uint32_t						m_uiUsage;
 	LPDIRECT3DVERTEXSHADER9			m_hShader;
 	LPDIRECT3DVERTEXDECLARATION9	m_hDecl;
 
 	static NiD3DVertexShader* Create(NiDX9Renderer* apRenderer) {
-		return NiCreate<NiD3DVertexShader, 0xBE0B30>(apRenderer);
+		if (bGECK)
+			return BSCreate<NiD3DVertexShader, 0x975490>(apRenderer);
+		else
+			return BSCreate<NiD3DVertexShader, 0xBE0B30>(apRenderer);
+
 	}
 };
 
@@ -458,40 +423,19 @@ public:
 	static NiD3DPixelShader* __fastcall CreatePixelShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename);
 };
 
-struct MemoryManager {
-	static MemoryManager* GetSingleton() {
-		return &*(MemoryManager*)0x11F6238;
-	}
-
-	template <typename T_Data>
-	__declspec(restrict) __declspec(allocator) static T_Data* Allocate() {
-		return static_cast<T_Data*>(Allocate(sizeof(T_Data)));
-	};
-	template <typename T_Data>
-	__declspec(restrict) __declspec(allocator) static T_Data* Allocate(size_t aCount) {
-		return static_cast<T_Data*>(Allocate(sizeof(T_Data) * aCount));
-	};
-	__declspec(restrict) __declspec(allocator) static void* Allocate(size_t aSize) {
-		return ThisStdCall<void*>(0xAA3E40, MemoryManager::GetSingleton(), aSize);
-	}
-	static void Deallocate(void* apMemory) {
-		ThisStdCall(0xAA4060, MemoryManager::GetSingleton(), apMemory);
-	}
-};
-
 class NiBinaryStream {
 public:
 	NiBinaryStream();
 	virtual ~NiBinaryStream();
 
-	virtual 		operator bool();
-	virtual void	Seek(SInt32 aiNumBytes);
-	virtual UInt32	GetPosition() const;
-	virtual void	SetEndianSwap(bool abDoSwap);
+	virtual 			operator bool();
+	virtual void		Seek(int32_t aiNumBytes);
+	virtual uint32_t	GetPosition() const;
+	virtual void		SetEndianSwap(bool abDoSwap);
 
-	UInt32	m_uiAbsoluteCurrentPos;
-	void*	m_pfnRead;
-	void*	m_pfnWrite;
+	uint32_t	m_uiAbsoluteCurrentPos;
+	void*		m_pfnRead;
+	void*		m_pfnWrite;
 };
 
 class NiFile : public NiBinaryStream {
@@ -499,9 +443,9 @@ public:
 	NiFile();
 	virtual ~NiFile();
 
-	virtual void		Seek(SInt32 aiOffset, SInt32 aiWhence);
+	virtual void		Seek(int32_t aiOffset, int32_t aiWhence);
 	virtual const char* GetFilename() const;
-	virtual UInt32		GetFileSize();
+	virtual uint32_t	GetFileSize();
 
 	enum OpenMode {
 		READ_ONLY = 0x0,
@@ -509,10 +453,10 @@ public:
 		APPEND_ONLY = 0x2,
 	};
 
-	UInt32		m_uiBufferAllocSize;
-	UInt32		m_uiBufferReadSize;
-	UInt32		m_uiPos;
-	UInt32		m_uiAbsolutePos;
+	uint32_t	m_uiBufferAllocSize;
+	uint32_t	m_uiBufferReadSize;
+	uint32_t	m_uiPos;
+	uint32_t	m_uiAbsolutePos;
 	char*		m_pBuffer;
 	FILE*		m_pFile;
 	OpenMode	m_eMode;
@@ -524,20 +468,20 @@ public:
 	BSFile();
 	virtual ~BSFile();
 
-	virtual bool	Open(int = 0, bool abTextMode = false);
-	virtual bool	OpenByFilePointer(FILE* apFile);
-	virtual UInt32	GetSize();
-	virtual UInt32	ReadString(BSString& arString, UInt32 auiMaxLength);
-	virtual UInt32	ReadStringAlt(BSString& arString, UInt32 auiMaxLength);
-	virtual UInt32	GetLine(char* apBuffer, UInt32 auiMaxBytes, UInt8 aucMark);
-	virtual UInt32	WriteString(BSString& arString, bool abBinary);
-	virtual UInt32	WriteStringAlt(BSString& arString, bool abBinary);
-	virtual bool	IsReadable();
-	virtual UInt32	DoRead(void* apBuffer, UInt32 auiBytes);
-	virtual UInt32	DoWrite(const void* apBuffer, UInt32 auiBytes);
+	virtual bool		Open(int = 0, bool abTextMode = false);
+	virtual bool		OpenByFilePointer(FILE* apFile);
+	virtual uint32_t	GetSize();
+	virtual uint32_t	ReadString(BSString& arString, uint32_t auiMaxLength);
+	virtual uint32_t	ReadStringAlt(BSString& arString, uint32_t auiMaxLength);
+	virtual uint32_t	GetLine(char* apBuffer, uint32_t auiMaxBytes, uint8_t aucMark);
+	virtual uint32_t	WriteString(BSString& arString, bool abBinary);
+	virtual uint32_t	WriteStringAlt(BSString& arString, bool abBinary);
+	virtual bool		IsReadable();
+	virtual uint32_t	DoRead(void* apBuffer, uint32_t auiBytes);
+	virtual uint32_t	DoWrite(const void* apBuffer, uint32_t auiBytes);
 
-	UInt32 ReadBuffer(void* apData, UInt32 auiSize) {
-		return ThisStdCall<UInt32>(0x462D80, this, apData, auiSize);
+	uint32_t ReadBuffer(void* apData, uint32_t auiSize) {
+		return ThisCall<uint32_t>(bGECK ? 0x401210 : 0x462D80, this, apData, auiSize);
 	}
 };
 
@@ -557,7 +501,7 @@ enum ARCHIVE_TYPE {
 };
 
 struct FileFinder {
-	enum LOOKIN_FLAGS : UInt8 {
+	enum LOOKIN_FLAGS : uint8_t {
 		SKIP_NONE		= 0,
 		SKIP_ARCHIVE	= 1,
 		SKIP_CWD		= 2,
@@ -565,18 +509,18 @@ struct FileFinder {
 	};
 
 	static FileFinder* GetSingleton() {
-		return *(FileFinder**)0x11F81DC;
+		return *(FileFinder**)(bGECK ? 0xF22AA0 : 0x11F81DC);
 	}
+
 	static BSFile* GetFile(const char* apName, NiFile::OpenMode aeMode, int aiSize, ARCHIVE_TYPE aeArchiveType) {
-		return CdeclCall<BSFile*>(0xAFDF20, apName, aeMode, aiSize, aeArchiveType);
+		return CdeclCall<BSFile*>(bGECK ? 0x8A1E10 : 0xAFDF20, apName, aeMode, aiSize, aeArchiveType);
+
 	}
 };
 
-
-
 class NiRenderer : public NiObject {
 public:
-	UInt32 padding[158];
+	uint32_t padding[158];
 };
 ASSERT_SIZE(NiRenderer, 0x280);
 
@@ -591,21 +535,61 @@ public:
 	}
 };
 
-class BSShaderManager {
+class ShaderBuffer {
 public:
-	struct ShaderPackage {
-		struct RawShader {
-			char	cFileName[260];
-			DWORD	shader;
-		};
+	ShaderBuffer() {
+		memset(this, 0, sizeof(ShaderBuffer));
+		ThisCall(bGECK ? 0x958320 : 0xB7FF40, this, CdeclCall<uint32_t>(bGECK ? 0x957EF0 : 0xB7FAF0));
+	}
 
-		static ShaderPackage* GetSingleton() { return *(ShaderPackage**)0x11F9498; }
-		RawShader* GetShader(const char* apcShaderName) {
-			return ThisStdCall<RawShader*>(0xB7FAC0, this, apcShaderName);
-		}
+	~ShaderBuffer() {
+		ThisCall(bGECK ? 0x958110 : 0xB7FD50, this);
+	}
+
+	const char* pPackagePath;
+	char content[0x18];
+
+	struct RawShader {
+		char	cFileName[260];
+		DWORD	shader;
 	};
 
+	void Load(const char* apPath) {
+		ThisCall(bGECK ? 0x958200 : 0xB7FE40, this, apPath);
+	}
+
+	RawShader* GetShader(const char* apcShaderName) {
+		return ThisCall<RawShader*>(bGECK ? 0x957EC0 : 0xB7FAC0, this, apcShaderName);
+
+	}
+};
+
+class BSShaderManager {
+public:
+	static ShaderBuffer* CreateShaderBuffer() {
+		if (!GetShaderBuffer())
+			SetShaderBuffer(new ShaderBuffer);
+
+		return GetShaderBuffer();
+	}
+
+	static void DestroyShaderBuffer() {
+		ShaderBuffer* pBuffer = GetShaderBuffer();
+		if (pBuffer) {
+			delete pBuffer;
+			SetShaderBuffer(nullptr);
+		}
+	}
+
+	static ShaderBuffer* GetShaderBuffer() {
+		return *(ShaderBuffer**)(bGECK ? 0xF23EE8 : 0x11F9498);
+	}
+
+	static void SetShaderBuffer(ShaderBuffer* apBuffer) {
+		*(ShaderBuffer**)(bGECK ? 0xF23EE8 : 0x11F9498) = apBuffer;
+	}
+
 	static NiDX9Renderer* GetRenderer() {
-		return *(NiPointer<NiDX9Renderer>*)0x11F9508;
+		return *(NiPointer<NiDX9Renderer>*)(bGECK ? 0xF23F58 : 0x11F9508);
 	}
 };
