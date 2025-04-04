@@ -6,6 +6,8 @@ BS_ALLOCATORS;
 
 IDebugLog	   gLog("logs\\ShaderLoader.log");
 
+static bool						bLoadedPackageOnDemand = false;
+static uint32_t					uiShaderCleanupFrameCounter = 0;
 static bool						bNVRPresent = false;
 static NVSEMessagingInterface*	pNVSEMessaging = nullptr;
 static PluginHandle				uiPluginHandle = 0;
@@ -35,6 +37,14 @@ void* CreateShader(const char* apFilename, FUNC aFunc) {
 			ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
 			if (pRaw)
 				pShaderData = &pRaw->shader;
+		}
+		else {
+			pShaderPkg = BSShaderManager::CreateShaderBuffer();
+			pShaderPkg->Load(pShaderPkg->pPackagePath);
+			ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
+			if (pRaw)
+				pShaderData = &pRaw->shader;
+			bLoadedPackageOnDemand = true;
 		}
 	}
 
@@ -110,6 +120,17 @@ static void __cdecl BSShaderManager__ReloadShaders() {
 	BSShaderManager::DestroyShaderBuffer();
 }
 
+static void CleanupShaderBuffer() {
+	if (bLoadedPackageOnDemand)
+		uiShaderCleanupFrameCounter++;
+
+	if (uiShaderCleanupFrameCounter > 360) {
+		BSShaderManager::DestroyShaderBuffer();
+		bLoadedPackageOnDemand = false;
+		uiShaderCleanupFrameCounter = 0;
+	}
+}
+
 static void GECKMessageHandler(NVSEMessagingInterface::Message* apMessage) {
 	switch(apMessage->type){
 	case NVSEMessagingInterface::kMessage_PostPostLoad:
@@ -120,18 +141,26 @@ static void GECKMessageHandler(NVSEMessagingInterface::Message* apMessage) {
 	}
 }
 
-EXTERN_DLL_EXPORT NiD3DPixelShader* CreatePixelShader(const char* apFilename) {
+static void GameMessageHandler(NVSEMessagingInterface::Message* apMessage) {
+	switch (apMessage->type) {
+	case NVSEMessagingInterface::kMessage_MainGameLoop:
+		CleanupShaderBuffer();
+		break;
+	}
+}
+
+EXTERN_DLL_EXPORT NiD3DPixelShader* __cdecl CreatePixelShader(const char* apFilename) {
 	return BSShader::CreatePixelShaderEx(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
 }
 
-EXTERN_DLL_EXPORT NiD3DVertexShader* CreateVertexShader(const char* apFilename) {
+EXTERN_DLL_EXPORT NiD3DVertexShader* __cdecl CreateVertexShader(const char* apFilename) {
 	return BSShader::CreateVertexShaderEx(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
 }
 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 131;
+	info->version = 132;
 
 #if SUPPORT_GECK
 	if (nvse)
@@ -164,6 +193,8 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 
 		for (uint32_t uiAddr : {0x5BF43C, 0x5C5A39})
 			ReplaceCall(uiAddr, BSShaderManager__ReloadShaders);
+
+		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", GameMessageHandler);
 	}
 
 	return true;
