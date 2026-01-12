@@ -121,7 +121,9 @@ NiD3DPixelShader* __fastcall BSShader::CreatePixelShaderEx(BSShader* apThis, voi
 }
 
 enum ShaderLoaderMessages {
-	SL_ShaderRefresh = 0 // Sent on RefreshShaders
+	SL_ShaderRefresh = 0, // Sent on RefreshShaders
+	SL_IS_PreRender = 1, // Sent pre rendering of EOF image space effects
+	SL_IS_PostRender = 2, // Sent after rendering of EOF image space effects
 };
 
 static void __cdecl BSShaderManager__ReloadShaders() {
@@ -149,6 +151,10 @@ static void CleanupShaderBuffer() {
 class ImageSpaceManagerEx : public ImageSpaceManager {
 public:
 	void RenderEndOfFrameEffects(NiDX9Renderer* apRenderer, BSRenderedTexture*& apSourceBuffer, BSRenderedTexture*& apDestinationBuffer) {
+		if (pNVSEMessaging) {
+			pNVSEMessaging->Dispatch(uiPluginHandle, SL_IS_PreRender, nullptr, 0, nullptr);
+		}
+
 		std::vector<ImageSpaceEffect*> kActiveEffects;
 
 		for (int i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
@@ -195,6 +201,10 @@ public:
 				pSource = pTarget;
 				pTarget = pTemp;
 			}
+		}
+
+		if (pNVSEMessaging) {
+			pNVSEMessaging->Dispatch(uiPluginHandle, SL_IS_PostRender, nullptr, 0, nullptr);
 		}
 	}
 };
