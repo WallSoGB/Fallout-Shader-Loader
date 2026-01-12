@@ -252,7 +252,7 @@ EXTERN_DLL_EXPORT void __cdecl RegisterEOFEffect(uint32_t auiIndex, ImageSpaceEf
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 132;
+	info->version = 140;
 
 #if SUPPORT_GECK
 	if (nvse)
