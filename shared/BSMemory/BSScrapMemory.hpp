@@ -1,0 +1,60 @@
+#pragma once
+
+namespace BSScrapMemory {
+	extern [[nodiscard]] __declspec(allocator) __declspec(restrict) void* malloc(std::size_t size);
+	extern [[nodiscard]] __declspec(allocator) __declspec(restrict) void* calloc(std::size_t size);
+	extern [[nodiscard]] __declspec(allocator) __declspec(restrict) void* aligned_alloc(size_t alignment, std::size_t size);
+
+	extern __declspec(noalias) void	aligned_free(void* ptr);
+
+	extern __declspec(noalias) void free(void* ptr);
+
+	extern __declspec(noalias) std::size_t msize(void* ptr);
+
+	template <typename T>
+	[[nodiscard]] __declspec(restrict) __declspec(allocator) T* malloc() {
+		return static_cast<T*>(BSScrapMemory::malloc(sizeof(T)));
+	};
+
+	template <typename T>
+	[[nodiscard]] __declspec(restrict) __declspec(allocator) T* malloc(std::size_t count) {
+		return static_cast<T*>(BSScrapMemory::malloc(sizeof(T) * count));
+	};
+
+	template <typename T, const uint32_t ConstructorPtr = 0, typename... Args>
+	[[nodiscard]] __declspec(restrict) T* create(Args &&... args) {
+		auto* ptr = BSScrapMemory::malloc<T>();
+		if constexpr (ConstructorPtr) {
+			ThisCall(ConstructorPtr, ptr, std::forward<Args>(args)...);
+		}
+		else {
+			memset(ptr, 0, sizeof(T));
+		}
+		return static_cast<T*>(ptr);
+	}
+
+	template <typename T, const uint32_t DestructorPtr = 0, typename... Args>
+	void destroy(T* ptr, Args &&... args) {
+		if constexpr (DestructorPtr) {
+			ThisCall(DestructorPtr, ptr, std::forward<Args>(args)...);
+		}
+		BSScrapMemory::free(ptr);
+	}
+}
+
+template<typename T>
+class BSScrapAllocator : public std::allocator<T> {
+public:
+	using value_type = T;
+	BSScrapAllocator() = default;
+
+	template<typename U>
+	BSScrapAllocator(const BSScrapAllocator<U>&) {}
+	[[nodiscard]] T* allocate(std::size_t n) {
+		return BSScrapMemory::malloc<T>(n);
+	}
+
+	void deallocate(T* p, std::size_t) noexcept {
+		BSScrapMemory::free(p);
+	}
+};

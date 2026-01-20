@@ -407,9 +407,9 @@ public:
 
 	static NiD3DPixelShader* Create(NiDX9Renderer* apRenderer) {
 		if (bGECK)
-			return BSCreate<NiD3DPixelShader, 0x975260>(apRenderer);
+			return BSMemory::create<NiD3DPixelShader, 0x975260>(apRenderer);
 		else
-			return BSCreate<NiD3DPixelShader, 0xBE08F0>(apRenderer);
+			return BSMemory::create<NiD3DPixelShader, 0xBE08F0>(apRenderer);
 	}
 };
 
@@ -433,17 +433,14 @@ public:
 
 	static NiD3DVertexShader* Create(NiDX9Renderer* apRenderer) {
 		if (bGECK)
-			return BSCreate<NiD3DVertexShader, 0x975490>(apRenderer);
+			return BSMemory::create<NiD3DVertexShader, 0x975490>(apRenderer);
 		else
-			return BSCreate<NiD3DVertexShader, 0xBE0B30>(apRenderer);
-
+			return BSMemory::create<NiD3DVertexShader, 0xBE0B30>(apRenderer);
 	}
 };
 
 class BSShader {
 public:
-	static NiD3DVertexShader* __fastcall CreateVertexShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename);
-	static NiD3DPixelShader* __fastcall CreatePixelShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename);
 };
 
 class NiBinaryStream {

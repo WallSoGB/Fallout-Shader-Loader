@@ -12,7 +12,7 @@
 
 #pragma warning(disable: 4244)
 
-#include "Allocator/BSMemory.hpp"
+#include "BSMemory/BSMemory.hpp"
 #include "SafeWrite/SafeWrite.hpp"
 #include "Utils/Bitfield.hpp"
 
