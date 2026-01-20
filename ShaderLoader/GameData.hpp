@@ -8,6 +8,7 @@ class bhkRigidBody;
 class BSFadeNode;
 class BSMultiBoundNode;
 class BSMultiBound;
+class BSRenderedTexture;
 class BSResizableTriShape;
 class BSSegmentedTriShape;
 class NiCloningProcess;
@@ -56,6 +57,8 @@ class BSString;
 class NiD3DShaderProgramCreator;
 class NiShaderConstantMapEntry;
 class NiD3DRenderState;
+class ImageSpaceEffectParam;
+class ImageSpaceManager;
 
 class NiMatrix3 {
 public:
@@ -77,6 +80,22 @@ public:
 class NiPoint4 {
 public:
 	float x, y, z, w;
+};
+
+class NiColor {
+public:
+	float r, g, b;
+};
+
+class NiColorA {
+public:
+	float r, g, b, a;
+};
+
+template <class T>
+class NiRect {
+public:
+	T m_left, m_right, m_top, m_bottom;
 };
 
 class NiTransform {
@@ -102,6 +121,10 @@ public:
 	uint16_t m_usSize;
 	uint16_t m_usESize;
 	uint16_t m_usGrowBy;
+
+	inline T_Data& GetAt(uint32_t auiIndex) const {
+		return m_pBase[auiIndex];
+	}
 };
 
 ASSERT_SIZE(NiTArray<void*>, 0x10);
@@ -591,5 +614,317 @@ public:
 
 	static NiDX9Renderer* GetRenderer() {
 		return *(NiPointer<NiDX9Renderer>*)(bGECK ? 0xF23F58 : 0x11F9508);
+	}
+};
+
+class ImageSpaceTexture {
+public:
+	bool							bForceAniso;
+	bool							bIsRenderedTexture;
+	bool							bIsBorrowed;
+	NiPointer<NiObject>				spTexture;
+	uint32_t						iFilterMode;
+	uint32_t						iClampMode;
+};
+
+class ImageSpaceEffect {
+public:
+	virtual ~ImageSpaceEffect();
+	virtual void Render(NiTriShape* apGeometry, NiDX9Renderer* apRenderer, ImageSpaceEffectParam* apParam, bool abEndFrame);
+	virtual void Setup(ImageSpaceManager* pISManager, ImageSpaceEffectParam* apParam);
+	virtual void Shutdown();
+	virtual void BorrowTextures(ImageSpaceEffectParam* apParam);
+	virtual void ReturnTextures();
+	virtual bool IsActive() const;
+	virtual bool UpdateParams(ImageSpaceEffectParam* apParam);
+};
+
+class ImageSpaceParameterData {
+public:
+	struct HDRValues {
+		union {
+			struct {
+				float fEyeAdaptSpeed;
+				float fBlurRadius;
+				float fBlurPasses;
+				float fEmissiveMult;
+				float fTargetLUM;
+				float fUpperLUMClamp;
+				float fBrightScale;
+				float fBrightClamp;
+				float fLUMRampNoTex;
+				float fLUMRampMin;
+				float fLUMRampMax;
+				float fSunlightDimmer;
+				float fGrassDimmer;
+				float fTreeDimmer;
+				float fSkinDimmer;
+			};
+			float fHDRValues[15];
+		};
+	};
+
+	struct BloomValues {
+		union {
+			struct {
+				float fBlurRadius;
+				struct {
+					float fInterior;
+					float fExterior;
+				} kAlphaMults;
+			};
+			float fBloomValues[3];
+		};
+	};
+
+	struct GetHitValues {
+		union {
+			struct {
+				float fBlurRadius;
+				float fBlurDamping;
+				float fDamping;
+			};
+			float fGetHitValues[3];
+		};
+	};
+
+	struct NightEyeValues {
+		union {
+			struct {
+				NiColor kColor;
+				float	fBrightness;
+			};
+			float	fNightEyeValues[4];
+		};
+	};
+
+	struct CinematicValues {
+		union {
+			struct {
+				float	fSaturation;
+				struct {
+					float	fAvgLumValue;
+					float	fValue;
+				} kContrast;
+				float	fBrightness;
+				struct {
+					NiColor kColor;
+					float	fValue;
+				} kTint;
+				NiColorA kUnknown;
+			};
+			float	fCinematicValues[12];
+		};
+	};
+
+	HDRValues		kHDR;
+	BloomValues		kBloom;
+	GetHitValues	kGetHit;
+	NightEyeValues	kNightEye;
+	CinematicValues	kCinematic;
+	uint32_t		uiCinematicsEnabled;
+};
+
+class ImageSpaceManager {
+public:
+	enum EffectID : int32_t {
+		IS_EFFECT_NONE = -1,
+		IS_EFFECT_BLOOM = 0,
+		IS_EFFECT_HDR = 1,
+		IS_EFFECT_REFRACTION = 2,
+		IS_EFFECT_CINEMATIC = 3,
+		IS_EFFECT_DEPTH_OF_FIELD = 4,
+		IS_EFFECT_DEPTH_RADIAL_BLUR = 5,
+		IS_EFFECT_RADIAL_BLUR = 6,
+		IS_EFFECT_FULLSCREEN_BLUR = 7,
+		IS_EFFECT_GET_HIT = 8,
+		IS_EFFECT_SUNBEAMS = 9,
+		IS_EFFECT_INTERFACE = 10,
+		IS_EFFECT_VATS_SCAN = 11,
+		IS_EFFECT_MOTION_BLUR = 12,
+		IS_EFFECT_VOLUMETRIC_FOG = 13,
+		IS_EFFECT_MAP = 14,
+		IS_EFFECT_MENU_BG = 15,
+		IS_EFFECT_BLUR_3 = 16,
+		IS_EFFECT_BLUR_5 = 17,
+		IS_EFFECT_BLUR_7 = 18,
+		IS_EFFECT_BLUR_9 = 19,
+		IS_EFFECT_BLUR_11 = 20,
+		IS_EFFECT_BLUR_13 = 21,
+		IS_EFFECT_BLUR_15 = 22,
+		IS_EFFECT_BRIGHTPASS_BLUR_3 = 23,
+		IS_EFFECT_BRIGHTPASS_BLUR_5 = 24,
+		IS_EFFECT_BRIGHTPASS_BLUR_7 = 25,
+		IS_EFFECT_BRIGHTPASS_BLUR_9 = 26,
+		IS_EFFECT_BRIGHTPASS_BLUR_11 = 27,
+		IS_EFFECT_BRIGHTPASS_BLUR_13 = 28,
+		IS_EFFECT_BRIGHTPASS_BLUR_15 = 29,
+		IS_EFFECT_TV = 30,
+		IS_EFFECT_WATER_FFT = 31,
+		IS_EFFECT_WATER_DISPLACEMENT = 32,
+		IS_EFFECT_NOISE = 33,
+		IS_EFFECT_MAX = 34,
+		IS_SHADER_COPY = 34,
+		IS_SHADER_COPY_RENDERTARGET1 = 35,
+		IS_SHADER_RESTORE_EDRAM = 36,
+		IS_SHADER_NULL = 37,
+		IS_SHADER_COPY_ALPHA = 38,
+		IS_SHADER_COPY_STENCIL = 39,
+		IS_SHADER_COPY_STENCIL_NO_TEXTURE_NO_DEPTH = 40,
+		IS_SHADER_REFRACTION = 41,
+		IS_SHADER_VOLUMETRIC_FOG = 42,
+		IS_SHADER_BLUR = 43,
+		IS_SHADER_DOUBLE_VISION = 44,
+		IS_SHADER_ALPHA_MULT = 45,
+		IS_SHADER_BLEND = 46,
+		IS_SHADER_TEXTURE_MASK = 47,
+		IS_SHADER_MAP = 48,
+		IS_SHADER_MENU_BG = 49,
+		IS_SHADER_CINEMATIC = 50,
+		IS_SHADER_DEPTH_OF_FIELD = 51,
+		IS_SHADER_DEPTH_OF_FIELD_MASK = 52,
+		IS_SHADER_MOTION_BLUR = 53,
+		IS_SHADER_RADIAL_BLUR = 54,
+		IS_SHADER_RADIAL_BLUR_MEDIUM = 55,
+		IS_SHADER_RADIAL_BLUR_HIGH = 56,
+		IS_SHADER_SUNBEAMS = 57,
+		IS_SHADER_HDR_BLEND = 58,
+		IS_SHADER_HDR_BLEND_CINEMATIC = 59,
+		IS_SHADER_HDR_BLEND_CINEMATIC_ALPHA_MASK = 60,
+		IS_SHADER_HDR_BLUR = 61,
+		IS_SHADER_BRIGHTPASS_FILTER = 62,
+		IS_SHADER_DOWNSAMPLE_16 = 63,
+		IS_SHADER_DOWNSAMPLE_9 = 64,
+		IS_SHADER_DOWNSAMPLE_4 = 65,
+		IS_SHADER_DOWNSAMPLE_4_LUM_CLAMP = 66,
+		IS_SHADER_DOWNSAMPLE_4_LIGHT_ADAPT = 67,
+		IS_SHADER_DOWNSAMPLE_16_LUM_CLAMP = 68,
+		IS_SHADER_DOWNSAMPLE_16_LIGHT_ADAPT = 69,
+		IS_SHADER_LIGHT_ADAPT = 70,
+		IS_SHADER_LUM_CLAMP = 71,
+		IS_SHADER_SCANLINES_BLEND = 72,
+		IS_SHADER_SCANLINES_BLEND_1 = 73,
+		IS_SHADER_VATS_SCAN = 75,
+		IS_SHADER_MENU_UNPACK = 76,
+		IS_SHADER_TV = 77,
+		IS_SHADER_BLUR_3 = 78,
+		IS_SHADER_BLUR_5 = 79,
+		IS_SHADER_BLUR_7 = 80,
+		IS_SHADER_BLUR_9 = 81,
+		IS_SHADER_BLUR_11 = 82,
+		IS_SHADER_BLUR_13 = 83,
+		IS_SHADER_BLUR_15 = 84,
+		IS_SHADER_BRIGHTPASS_BLUR_3 = 85,
+		IS_SHADER_BRIGHTPASS_BLUR_5 = 86,
+		IS_SHADER_BRIGHTPASS_BLUR_7 = 87,
+		IS_SHADER_BRIGHTPASS_BLUR_9 = 88,
+		IS_SHADER_BRIGHTPASS_BLUR_11 = 89,
+		IS_SHADER_BRIGHTPASS_BLUR_13 = 90,
+		IS_SHADER_BRIGHTPASS_BLUR_15 = 91,
+		IS_SHADER_WATER_FFT_WATER_SPECTRUM = 93,
+		IS_SHADER_WATER_FFT_HORIZONTAL_BUTTERFLY = 94,
+		IS_SHADER_WATER_FFT_VERTICAL_BUTTERFLY = 95,
+		IS_SHADER_WATER_FFT_HORIZONTAL_SCRAMBLE = 96,
+		IS_SHADER_WATER_FFT_VERTICAL_SCRAMBLE = 97,
+		IS_SHADER_WATER_FFT_NORMALS = 98,
+		IS_SHADER_WATER_FFT_FILTER = 99,
+		IS_SHADER_WATER_FFT_DISPLAY_NORMALS = 100,
+		IS_SHADER_WATER_FFT_DISPLAY_HIGHW = 101,
+		IS_SHADER_WATER_FFT_DISPLAY_AMPLITUTE = 102,
+		IS_SHADER_WATER_FFT_WATER_SPECTRUM_1 = 103,
+		IS_SHADER_WATER_FFT_DISPLAY_WATER_HEIGHT = 104,
+		IS_SHADER_WATER_DISPLACEMENT_CLEAR_SIMULATION = 105,
+		IS_SHADER_WATER_DISPLACEMENT_TEX_OFFSET = 106,
+		IS_SHADER_WATER_DISPLACEMENT_WADING_RIPPLE = 107,
+		IS_SHADER_WATER_DISPLACEMENT_RAIN_RIPPLE = 108,
+		IS_SHADER_WATER_DISPLACEMENT_WADING_HEIGHTMAP = 109,
+		IS_SHADER_WATER_DISPLACEMENT_RAIN_HEIGHTMAP = 110,
+		IS_SHADER_WATER_DISPLACEMENT_BLEND_HEIGHTMAPS = 111,
+		IS_SHADER_WATER_DISPLACEMENT_SMOOTH_HEIGHTMAP = 112,
+		IS_SHADER_WATER_DISPLACEMENT_NORMALS = 113,
+		IS_SHADER_NOISE_SCROLL_AND_BLEND = 114,
+		IS_SHADER_NOISE_NORMAL_MAP = 115,
+	};
+
+	BSRenderedTexture*						pEOFDest;
+	NiTArray<ImageSpaceEffect*>				kEffects;
+	ImageSpaceParameterData					kCurrentParameterData;
+	ImageSpaceParameterData*				pBaseParameterData;
+	ImageSpaceParameterData*				pOverrideBaseParameterData;
+	ImageSpaceParameterData					kWeatherParameterData[2];
+	bool									bIsReady;
+	int32_t									iActiveEffectsCount;
+	int32_t									eLastEffect;
+	NiPointer<NiTriShape>					spScreenTriShape;
+	NiPointer<NiGeometryData>				spScreenTriShapeData;
+	NiPointer<NiTriShape>					spPartialScreenTriShape;
+	bool									bEnablePartialRender;
+	NiPointer<NiTriShape>					spMenuUnpackGeom;
+	ImageSpaceTexture						kDepthTexture;
+	NiColorA								kTintColor;
+	NiColorA								kWeatherTintColor;
+	float									fHighestTintValue;
+	NiColorA								kFadeColor;
+	NiColorA								kWeatherFadeColor;
+	float									fHighestFadeValue;
+	float									fHighestBlurValue;
+	float									fWeatherBlurValue;
+	float									fHighestDoubleValue;
+	float									fWeatherDoubleValue;
+	float									fHighestRadialBlurStrengthValue;
+	float									fCurrentRadialBlurRampupValue;
+	float									fCurrentRadialBlurStartValue;
+	float									fCurrentRadialBlurRampDownValue;
+	float									fCurrentRadialBlurDownStartValue;
+	float									fWeatherRadialBlurStrengthValue;
+	float									fWeatherRadialBlurRampupValue;
+	float									fWeatherRadialBlurStartValue;
+	float									fWeatherRadialBlurRampDownValue;
+	float									fWeatherRadialBlurDownStartValue;
+	NiPoint2								kCurrentRadialBlurCenter;
+	NiPoint2								kWeatherRadialBlurCenter;
+	float									fHighestDOFStrengthValue;
+	float									fCurrentDOFDistanceValue;
+	float									fCurrentDOFRangeValue;
+	float									fCurrentDOFMaskConst;
+	float									fWeatherDOFStrengthValue;
+	float									fWeatherDOFDistanceValue;
+	float									fWeatherDOFRangeValue;
+	float									fWeatherDOFMaskConst;
+	uint32_t								eCurrentDOFMode;
+	uint32_t								eWeatherDOFMode;
+	bool									bCurrentDOFUseMask;
+	bool									bWeatherDOFUseMask;
+	float									fHighestDepthRadialBlurStrengthValue;
+	float									fCurrentDepthRadialBlurRampupValue;
+	float									fCurrentDepthRadialBlurStartValue;
+	float									fCurrentDepthRadialBlurDistance;
+	float									fCurrentDepthRadialBlurRange;
+	NiPoint2								kCurrentDepthRadialBlurCenter;
+	uint32_t								eCurrentDepthRadialBlurMode;
+	float									fHighestMotionBlurStrengthValue;
+	float									fWeatherMotionBlurStrengthValue;
+	NiColorA								kRefractionTint;
+	NiRect<float>							kCustomViewPort;
+	BSRenderedTexture*						pSwapTarget;
+
+	static ImageSpaceManager* GetSingleton() {
+		return *reinterpret_cast<ImageSpaceManager**>(bGECK ? 0xF23BFC : 0x11F91AC);
+	}
+
+	bool IsEOFEnabled() {
+		return bGECK ? *reinterpret_cast<bool*>(0xEB90D0) : *reinterpret_cast<bool*>(0x11AD884);
+	}
+
+	ImageSpaceEffect* GetEffect(uint32_t effectID) const {
+		return kEffects.GetAt(effectID);
+	}
+
+	void RenderEffect(ImageSpaceEffect* apEffect, NiDX9Renderer* apRenderer, BSRenderedTexture* apSourceTarget, BSRenderedTexture* apDestTarget, ImageSpaceEffectParam* apParam, bool abEndFrame) {
+		ThisCall(bGECK ? 0x913F60 : 0xB8C830, this, apEffect, apRenderer, apSourceTarget, apDestTarget, apParam, abEndFrame);
+	}
+
+	void RenderEffect(ImageSpaceManager::EffectID aeID, NiDX9Renderer* apRenderer, BSRenderedTexture* apSourceTarget, BSRenderedTexture* apDestTarget, ImageSpaceEffectParam* apParam, bool abEndFrame) {
+		ThisCall(bGECK ? 0x91EC40 : 0xB97550, this, aeID, apRenderer, apSourceTarget, apDestTarget, apParam, abEndFrame);
 	}
 };

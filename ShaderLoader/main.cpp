@@ -2,15 +2,30 @@
 #include "nvse/PluginAPI.h"
 #include "shared/Utils/DebugLog.hpp"
 
+#include <algorithm>
+#include <vector>
+
 BS_ALLOCATORS;
 
 IDebugLog	   gLog("logs\\ShaderLoader.log");
 
-static bool						bLoadedPackageOnDemand = false;
-static uint32_t					uiShaderCleanupFrameCounter = 0;
-static bool						bNVRPresent = false;
-static NVSEMessagingInterface*	pNVSEMessaging = nullptr;
-static PluginHandle				uiPluginHandle = 0;
+static bool								bLoadedPackageOnDemand = false;
+static uint32_t							uiShaderCleanupFrameCounter = 0;
+static bool								bNVRPresent = false;
+static NVSEMessagingInterface*			pNVSEMessaging = nullptr;
+static PluginHandle						uiPluginHandle = 0;
+
+static const uint32_t					uiEOFEffectIndexDivider = 1000u;
+
+struct EOFISEffect {
+	uint32_t			uiIndex;
+	ImageSpaceEffect*	pEffect;
+};
+static std::vector<EOFISEffect>			kAdditionalEOFEffects;
+
+bool EffectOrder(const EOFISEffect& arEffect1, const EOFISEffect& arEffect2) {
+	return arEffect1.uiIndex < arEffect2.uiIndex;
+}
 
 template <typename FUNC>
 void* CreateShader(const char* apFilename, FUNC aFunc) {
@@ -106,7 +121,9 @@ NiD3DPixelShader* __fastcall BSShader::CreatePixelShaderEx(BSShader* apThis, voi
 }
 
 enum ShaderLoaderMessages {
-	SL_ShaderRefresh = 0 // Sent on RefreshShaders
+	SL_ShaderRefresh = 0, // Sent on RefreshShaders
+	SL_IS_PreRender = 1, // Sent pre rendering of EOF image space effects
+	SL_IS_PostRender = 2, // Sent after rendering of EOF image space effects
 };
 
 static void __cdecl BSShaderManager__ReloadShaders() {
@@ -130,6 +147,67 @@ static void CleanupShaderBuffer() {
 		uiShaderCleanupFrameCounter = 0;
 	}
 }
+
+class ImageSpaceManagerEx : public ImageSpaceManager {
+public:
+	void RenderEndOfFrameEffects(NiDX9Renderer* apRenderer, BSRenderedTexture*& apSourceBuffer, BSRenderedTexture*& apDestinationBuffer) {
+		if (pNVSEMessaging) {
+			pNVSEMessaging->Dispatch(uiPluginHandle, SL_IS_PreRender, nullptr, 0, nullptr);
+		}
+
+		std::vector<ImageSpaceEffect*> kActiveEffects;
+
+		for (int i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
+			for (int j = 0; j < kAdditionalEOFEffects.size(); j++) {
+				auto kAdditionalEffect = kAdditionalEOFEffects.at(j);
+
+				if (kAdditionalEffect.uiIndex >= (i + 1) * uiEOFEffectIndexDivider)
+					break;
+
+				if (kAdditionalEffect.pEffect->IsActive())
+					kActiveEffects.push_back(kAdditionalEffect.pEffect);
+			}
+
+			ImageSpaceEffect* pEffect = GetEffect(i);
+
+			if (pEffect && pEffect->IsActive())
+				kActiveEffects.push_back(pEffect);
+		}
+
+		pEOFDest = apDestinationBuffer;
+
+		if (kActiveEffects.empty()) [[unlikely]] {
+			RenderEffect(IS_SHADER_COPY, apRenderer, apSourceBuffer, apDestinationBuffer, nullptr, true);
+		}
+		else [[likely]] {
+			BSRenderedTexture* pSource = apSourceBuffer;
+			uint32_t uiCount = kActiveEffects.size();
+			BSRenderedTexture* pTarget = nullptr;
+
+			if (uiCount == 1) {
+				pTarget = apDestinationBuffer;
+			}
+			else {
+				pTarget = pSwapTarget;
+			}
+
+			for (int32_t i = 0; i < kActiveEffects.size(); ++i) {
+				if (i == kActiveEffects.size() - 1)
+					pTarget = apDestinationBuffer;
+
+				ImageSpaceEffect* pISEffect = kActiveEffects.at(i);
+				RenderEffect(pISEffect, apRenderer, pSource, pTarget, nullptr, true);
+				BSRenderedTexture* pTemp = pSource;
+				pSource = pTarget;
+				pTarget = pTemp;
+			}
+		}
+
+		if (pNVSEMessaging) {
+			pNVSEMessaging->Dispatch(uiPluginHandle, SL_IS_PostRender, nullptr, 0, nullptr);
+		}
+	}
+};
 
 static void GECKMessageHandler(NVSEMessagingInterface::Message* apMessage) {
 	switch(apMessage->type){
@@ -157,10 +235,24 @@ EXTERN_DLL_EXPORT NiD3DVertexShader* __cdecl CreateVertexShader(const char* apFi
 	return BSShader::CreateVertexShaderEx(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
 }
 
+EXTERN_DLL_EXPORT void __cdecl RegisterEOFEffect(uint32_t auiIndex, ImageSpaceEffect* apEffect) {
+	if (!apEffect)
+		return;
+
+	_MESSAGE("Register custom EOF effect at index %d", auiIndex);
+
+	EOFISEffect kEffect{ auiIndex, apEffect };
+
+	kAdditionalEOFEffects.insert(
+		std::upper_bound(kAdditionalEOFEffects.begin(), kAdditionalEOFEffects.end(), kEffect, EffectOrder),
+		kEffect
+	);
+}
+
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = "Shader Loader";
-	info->version = 132;
+	info->version = 140;
 
 #if SUPPORT_GECK
 	if (nvse)
@@ -193,6 +285,8 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 
 		for (uint32_t uiAddr : {0x5BF43C, 0x5C5A39})
 			ReplaceCall(uiAddr, BSShaderManager__ReloadShaders);
+
+		WriteRelJumpEx(0xB97900, &ImageSpaceManagerEx::RenderEndOfFrameEffects);
 
 		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", GameMessageHandler);
 	}
