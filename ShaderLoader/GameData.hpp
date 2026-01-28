@@ -584,6 +584,17 @@ public:
 	}
 };
 
+class BSTextureManager {
+public:
+	BSRenderedTexture* BorrowRenderedTexture(NiDX9Renderer* apRenderer, uint32_t aeType, uint32_t auiFlags, class NiRenderedTexture* apAliasTex, uint32_t auiAliasOffset) {
+		return ThisCall<BSRenderedTexture*>(bGECK ? 0x907440 : 0xB6E110, this, apRenderer, aeType, auiFlags, apAliasTex, auiAliasOffset);
+	}
+
+	void ReturnRenderedTexture(BSRenderedTexture* apRenderedTexture) {
+		ThisCall(bGECK ? 0x906D40 : 0xB6DA10, this, apRenderedTexture);
+	}
+};
+
 class BSShaderManager {
 public:
 	static ShaderBuffer* CreateShaderBuffer() {
@@ -602,15 +613,19 @@ public:
 	}
 
 	static ShaderBuffer* GetShaderBuffer() {
-		return *(ShaderBuffer**)(bGECK ? 0xF23EE8 : 0x11F9498);
+		return *reinterpret_cast<ShaderBuffer**>(bGECK ? 0xF23EE8 : 0x11F9498);
 	}
 
 	static void SetShaderBuffer(ShaderBuffer* apBuffer) {
-		*(ShaderBuffer**)(bGECK ? 0xF23EE8 : 0x11F9498) = apBuffer;
+		*reinterpret_cast<ShaderBuffer**>(bGECK ? 0xF23EE8 : 0x11F9498) = apBuffer;
 	}
 
 	static NiDX9Renderer* GetRenderer() {
-		return *(NiPointer<NiDX9Renderer>*)(bGECK ? 0xF23F58 : 0x11F9508);
+		return *reinterpret_cast<NiPointer<NiDX9Renderer>*>(bGECK ? 0xF23F58 : 0x11F9508);
+	}
+	
+	static BSTextureManager* GetTextureManager() {
+		return *reinterpret_cast<BSTextureManager**>(bGECK ? 0xF23BF8 : 0x11F91A8);
 	}
 };
 
