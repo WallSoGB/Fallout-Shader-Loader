@@ -8,6 +8,9 @@
 
 BS_ALLOCATORS;
 
+constexpr const char* PLUGIN_NAME = "Shader Loader";
+constexpr uint32_t PLUGIN_VERSION = 140;
+
 IDebugLog	   gLog("logs\\ShaderLoader.log");
 
 static NVSEMessagingInterface*			pNVSEMessaging = nullptr;
@@ -275,9 +278,9 @@ EXTERN_DLL_EXPORT void __cdecl RegisterEOFEffect(uint32_t auiIndex, ImageSpaceEf
 }
 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
-	info->infoVersion = PluginInfo::kInfoVersion;
-	info->name = "Shader Loader";
-	info->version = 140;
+	info->infoVersion	= PluginInfo::kInfoVersion;
+	info->name			= PLUGIN_NAME;
+	info->version		= PLUGIN_VERSION;
 
 #if SUPPORT_GECK
 	if (nvse)
