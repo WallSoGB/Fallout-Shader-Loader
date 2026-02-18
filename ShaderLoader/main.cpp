@@ -18,17 +18,17 @@ static PluginHandle						uiPluginHandle = 0;
 
 namespace ShaderLoader {
 	
-	static bool								bLoadedPackageOnDemand = false;
-	static uint32_t							uiShaderCleanupFrameCounter = 0;
-	static bool								bNVRPresent = false;
+	bool								bLoadedPackageOnDemand = false;
+	uint32_t							uiShaderCleanupFrameCounter = 0;
+	bool								bNVRPresent = false;
 
-	static constexpr uint32_t				EOF_EFFECT_INDEX_DIVIDER = 1000u;
+	static constexpr uint32_t			EOF_EFFECT_INDEX_DIVIDER = 1000u;
 
 	struct EOFISEffect {
-		uint32_t			uiIndex;
-		ImageSpaceEffect* pEffect;
+		uint32_t			uiIndex = 0;
+		ImageSpaceEffect*	pEffect = nullptr;
 	};
-	static std::vector<EOFISEffect>			kAdditionalEOFEffects;
+	std::vector<EOFISEffect>			kAdditionalEOFEffects;
 
 	struct ImageSpaceMessage {
 		BSRenderedTexture* pSource;
@@ -183,26 +183,39 @@ namespace Hooks {
 			ShaderLoader::ImageSpaceMessage kMessage{ apSourceBuffer, apDestinationBuffer };
 			pNVSEMessaging->Dispatch(uiPluginHandle, ShaderLoader::SL_IS_PreRender, &kMessage, sizeof(kMessage), nullptr);
 
-			std::vector<ImageSpaceEffect*, BSScrapAllocator<ImageSpaceEffect*>> kActiveEffects(16);
-			{
-				eLastEffect = -1;
-				iActiveEffectsCount = 0;
-				for (uint32_t i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
-					for (uint32_t j = 0; j < ShaderLoader::kAdditionalEOFEffects.size(); j++) {
-						auto& rAdditionalEffect = ShaderLoader::kAdditionalEOFEffects.at(j);
+			eLastEffect = -1;
+			iActiveEffectsCount = 0;
 
-						if (rAdditionalEffect.uiIndex >= (i + 1) * ShaderLoader::EOF_EFFECT_INDEX_DIVIDER)
-							break;
+			std::vector<ImageSpaceEffect*, BSScrapAllocator<ImageSpaceEffect*>> kActiveEffects;
+			if (IsEOFEnabled()) [[likely]] {
+				if (ShaderLoader::kAdditionalEOFEffects.empty()) {
+					for (uint32_t i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
+						ImageSpaceEffect* pEffect = GetEffect(i);
 
-						if (rAdditionalEffect.pEffect && rAdditionalEffect.pEffect->IsActive())
-							kActiveEffects.push_back(rAdditionalEffect.pEffect);
+						if (pEffect && pEffect->IsActive()) {
+							kActiveEffects.push_back(pEffect);
+							eLastEffect = i;
+						}
 					}
+				}
+				else {
+					for (uint32_t i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
+						for (uint32_t j = 0; j < ShaderLoader::kAdditionalEOFEffects.size(); j++) {
+							const auto& rAdditionalEffect = ShaderLoader::kAdditionalEOFEffects.at(j);
 
-					ImageSpaceEffect* pEffect = GetEffect(i);
+							if (rAdditionalEffect.uiIndex >= (i + 1) * ShaderLoader::EOF_EFFECT_INDEX_DIVIDER)
+								break;
 
-					if (pEffect && pEffect->IsActive()) {
-						kActiveEffects.push_back(pEffect);
-						eLastEffect = i;
+							if (rAdditionalEffect.pEffect && rAdditionalEffect.pEffect->IsActive())
+								kActiveEffects.push_back(rAdditionalEffect.pEffect);
+						}
+
+						ImageSpaceEffect* pEffect = GetEffect(i);
+
+						if (pEffect && pEffect->IsActive()) {
+							kActiveEffects.push_back(pEffect);
+							eLastEffect = i;
+						}
 					}
 				}
 
@@ -229,11 +242,12 @@ namespace Hooks {
 				}
 
 				uint32_t uiRenderedEffects = 0;
-				for (uint32_t i = 0; i <= uiCount; i++) {
+				const uint32_t uiEndEffect = uiCount - 1;
+				for (uint32_t i = 0; i <= uiEndEffect; i++) {
 					if (uiRenderedEffects == 1 && pSwapRT)
 						pTarget = pSwapRT;
 					
-					if (i == uiCount)
+					if (i == uiEndEffect)
 						pTarget = apDestinationBuffer;
 
 					ImageSpaceEffect* pISEffect = kActiveEffects.at(i);
