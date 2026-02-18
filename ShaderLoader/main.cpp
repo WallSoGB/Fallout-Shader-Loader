@@ -34,7 +34,7 @@ namespace ShaderLoader {
 
 	enum ShaderLoaderMessages {
 		SL_ShaderRefresh = 0, // Sent on RefreshShaders
-		SL_IS_PreRender = 1, // Sent pre rendering of EOF image space effects
+		SL_IS_PreRender  = 1, // Sent pre rendering of EOF image space effects
 		SL_IS_PostRender = 2, // Sent after rendering of EOF image space effects
 	};
 
@@ -328,5 +328,7 @@ BOOL WINAPI DllMain(
 	LPVOID  lpreserved
 )
 {
+	if (dwReason == DLL_PROCESS_ATTACH)
+		DisableThreadLibraryCalls(static_cast<HMODULE>(hDllHandle));
 	return TRUE;
 }
