@@ -407,9 +407,9 @@ public:
 
 	static NiD3DPixelShader* Create(NiDX9Renderer* apRenderer) {
 		if (bGECK)
-			return BSCreate<NiD3DPixelShader, 0x975260>(apRenderer);
+			return BSMemory::create<NiD3DPixelShader, 0x975260>(apRenderer);
 		else
-			return BSCreate<NiD3DPixelShader, 0xBE08F0>(apRenderer);
+			return BSMemory::create<NiD3DPixelShader, 0xBE08F0>(apRenderer);
 	}
 };
 
@@ -433,17 +433,14 @@ public:
 
 	static NiD3DVertexShader* Create(NiDX9Renderer* apRenderer) {
 		if (bGECK)
-			return BSCreate<NiD3DVertexShader, 0x975490>(apRenderer);
+			return BSMemory::create<NiD3DVertexShader, 0x975490>(apRenderer);
 		else
-			return BSCreate<NiD3DVertexShader, 0xBE0B30>(apRenderer);
-
+			return BSMemory::create<NiD3DVertexShader, 0xBE0B30>(apRenderer);
 	}
 };
 
 class BSShader {
 public:
-	static NiD3DVertexShader* __fastcall CreateVertexShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename);
-	static NiD3DPixelShader* __fastcall CreatePixelShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename);
 };
 
 class NiBinaryStream {
@@ -587,6 +584,17 @@ public:
 	}
 };
 
+class BSTextureManager {
+public:
+	BSRenderedTexture* BorrowRenderedTexture(NiDX9Renderer* apRenderer, uint32_t aeType, uint32_t auiFlags, class NiRenderedTexture* apAliasTex, uint32_t auiAliasOffset) {
+		return ThisCall<BSRenderedTexture*>(bGECK ? 0x907440 : 0xB6E110, this, apRenderer, aeType, auiFlags, apAliasTex, auiAliasOffset);
+	}
+
+	void ReturnRenderedTexture(BSRenderedTexture* apRenderedTexture) {
+		ThisCall(bGECK ? 0x906D40 : 0xB6DA10, this, apRenderedTexture);
+	}
+};
+
 class BSShaderManager {
 public:
 	static ShaderBuffer* CreateShaderBuffer() {
@@ -605,15 +613,19 @@ public:
 	}
 
 	static ShaderBuffer* GetShaderBuffer() {
-		return *(ShaderBuffer**)(bGECK ? 0xF23EE8 : 0x11F9498);
+		return *reinterpret_cast<ShaderBuffer**>(bGECK ? 0xF23EE8 : 0x11F9498);
 	}
 
 	static void SetShaderBuffer(ShaderBuffer* apBuffer) {
-		*(ShaderBuffer**)(bGECK ? 0xF23EE8 : 0x11F9498) = apBuffer;
+		*reinterpret_cast<ShaderBuffer**>(bGECK ? 0xF23EE8 : 0x11F9498) = apBuffer;
 	}
 
 	static NiDX9Renderer* GetRenderer() {
-		return *(NiPointer<NiDX9Renderer>*)(bGECK ? 0xF23F58 : 0x11F9508);
+		return *reinterpret_cast<NiPointer<NiDX9Renderer>*>(bGECK ? 0xF23F58 : 0x11F9508);
+	}
+	
+	static BSTextureManager* GetTextureManager() {
+		return *reinterpret_cast<BSTextureManager**>(bGECK ? 0xF23BF8 : 0x11F91A8);
 	}
 };
 

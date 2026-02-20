@@ -24,7 +24,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <PreferredToolArchitecture>x64</PreferredToolArchitecture>
@@ -33,7 +33,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-GECK|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <PreferredToolArchitecture>x64</PreferredToolArchitecture>
@@ -41,7 +41,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -95,8 +95,10 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ForcedIncludeFiles>shared\defines.hpp;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <ExceptionHandling>false</ExceptionHandling>
+      <LanguageStandard_C>stdclatest</LanguageStandard_C>
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>
@@ -108,12 +110,13 @@
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <PostBuildEvent>
-      <Message>Installing DLL...</Message>
-      <Command>copy "$(TargetPath)" "C:\Games\Modding\TTW\mods\Fallout Alpha Rendering Tweaks - NVSE\nvse\plugins\$(TargetFileName)"
-copy "$(TargetDir)$(TargetName).pdb" "C:\Games\Modding\TTW\mods\Fallout Alpha Rendering Tweaks - NVSE\nvse\plugins\$(TargetName).pdb"
-copy "$(TargetPath)" "$(LOCALAPPDATA)\ModOrganizer\TTW\mods\Fallout Alpha Rendering Tweaks - NVSE\nvse\plugins\$(TargetFileName)"
-copy "$(TargetDir)$(TargetName).pdb" "$(LOCALAPPDATA)\ModOrganizer\TTW\mods\Fallout Alpha Rendering Tweaks - NVSE\nvse\plugins\$(TargetName).pdb"
-copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
+      <Message>
+      </Message>
+      <Command>if exist "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins" (
+copy "$(TargetPath)" "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
+copy "$(TargetDir)$(TargetName).pdb" "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
+copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"
+)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -125,20 +128,20 @@ copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ForcedIncludeFiles>shared\defines.hpp;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <EnableParallelCodeGeneration>false</EnableParallelCodeGeneration>
       <FloatingPointModel>Fast</FloatingPointModel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <IntelJCCErratum>true</IntelJCCErratum>
-      <Optimization>MinSpace</Optimization>
-      <OmitFramePointers>true</OmitFramePointers>
+      <Optimization>MaxSpeed</Optimization>
+      <OmitFramePointers>false</OmitFramePointers>
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <LanguageStandard_C>stdclatest</LanguageStandard_C>
       <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>
@@ -154,11 +157,11 @@ copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
     <PostBuildEvent>
       <Message>
       </Message>
-      <Command>copy "$(TargetPath)" "$(MO2)\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
-copy "$(TargetDir)$(TargetName).pdb" "$(MO2)\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
-copy "$(TargetPath)" "C:\Games\Modding\VNV\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
-copy "$(TargetDir)$(TargetName).pdb" "C:\Games\Modding\VNV\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
-copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
+      <Command>if exist "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins" (
+copy "$(TargetPath)" "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
+copy "$(TargetDir)$(TargetName).pdb" "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
+copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"
+)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-GECK|Win32'">
@@ -171,20 +174,20 @@ copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ForcedIncludeFiles>shared\defines.hpp;%(ForcedIncludeFiles)</ForcedIncludeFiles>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <EnableParallelCodeGeneration>false</EnableParallelCodeGeneration>
       <FloatingPointModel>Fast</FloatingPointModel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <IntelJCCErratum>true</IntelJCCErratum>
-      <Optimization>MinSpace</Optimization>
-      <OmitFramePointers>true</OmitFramePointers>
+      <Optimization>MaxSpeed</Optimization>
+      <OmitFramePointers>false</OmitFramePointers>
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <LanguageStandard_C>stdclatest</LanguageStandard_C>
       <StringPooling>true</StringPooling>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>
@@ -201,21 +204,23 @@ copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
     <PostBuildEvent>
       <Message>
       </Message>
-      <Command>copy "$(TargetPath)" "$(MO2)\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
-copy "$(TargetDir)$(TargetName).pdb" "$(MO2)\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
-copy "$(TargetPath)" "C:\Games\Modding\VNV\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
-copy "$(TargetDir)$(TargetName).pdb" "C:\Games\Modding\VNV\mods\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
-copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"</Command>
+      <Command>if exist "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins" (
+copy "$(TargetPath)" "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetFileName)"
+copy "$(TargetDir)$(TargetName).pdb" "$(MO2)\Fallout Shader Loader - NVSE\nvse\plugins\$(TargetName).pdb"
+copy "$(TargetDir)$(TargetName).pdb" "C:\Symbols\$(TargetName).pdb"
+)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\shared\Allocator\BSMemory.cpp" />
+    <ClCompile Include="..\shared\BSMemory\BSMemory.cpp" />
+    <ClCompile Include="..\shared\BSMemory\BSScrapMemory.cpp" />
     <ClCompile Include="..\shared\SafeWrite\SafeWrite.cpp" />
     <ClCompile Include="..\shared\Utils\DebugLog.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\shared\Allocator\BSMemory.hpp" />
+    <ClInclude Include="..\shared\BSMemory\BSMemory.hpp" />
+    <ClInclude Include="..\shared\BSMemory\BSScrapMemory.hpp" />
     <ClInclude Include="..\shared\Defines.hpp" />
     <ClInclude Include="..\shared\SafeWrite\SafeWrite.hpp" />
     <ClInclude Include="..\shared\Utils\DebugLog.hpp" />

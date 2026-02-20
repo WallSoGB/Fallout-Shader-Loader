@@ -1,4 +1,5 @@
 #include "GameData.hpp"
+#include "Shared/BSMemory/BSScrapMemory.hpp"
 #include "nvse/PluginAPI.h"
 #include "shared/Utils/DebugLog.hpp"
 
@@ -7,232 +8,273 @@
 
 BS_ALLOCATORS;
 
+constexpr const char* PLUGIN_NAME = "Shader Loader";
+constexpr uint32_t PLUGIN_VERSION = 140;
+
 IDebugLog	   gLog("logs\\ShaderLoader.log");
 
-static bool								bLoadedPackageOnDemand = false;
-static uint32_t							uiShaderCleanupFrameCounter = 0;
-static bool								bNVRPresent = false;
 static NVSEMessagingInterface*			pNVSEMessaging = nullptr;
 static PluginHandle						uiPluginHandle = 0;
 
-static const uint32_t					uiEOFEffectIndexDivider = 1000u;
+namespace ShaderLoader {
+	
+	bool								bLoadedPackageOnDemand = false;
+	uint32_t							uiShaderCleanupFrameCounter = 0;
+	bool								bNVRPresent = false;
 
-struct EOFISEffect {
-	uint32_t			uiIndex;
-	ImageSpaceEffect*	pEffect;
-};
-static std::vector<EOFISEffect>			kAdditionalEOFEffects;
+	static constexpr uint32_t			EOF_EFFECT_INDEX_DIVIDER = 1000u;
 
-bool EffectOrder(const EOFISEffect& arEffect1, const EOFISEffect& arEffect2) {
-	return arEffect1.uiIndex < arEffect2.uiIndex;
-}
+	struct EOFISEffect {
+		uint32_t			uiIndex = 0;
+		ImageSpaceEffect*	pEffect = nullptr;
+	};
+	std::vector<EOFISEffect>			kAdditionalEOFEffects;
 
-template <typename FUNC>
-void* CreateShader(const char* apFilename, FUNC aFunc) {
-	DWORD* pShaderData = nullptr;
-	bool bFreeMem = false;
-	char cPath[MAX_PATH];
-	sprintf_s(cPath, "Data\\Shaders\\Loose\\%s", apFilename);
-	BSFile* pFile = FileFinder::GetFile(cPath, NiFile::READ_ONLY, 0x4000, ARCHIVE_TYPE_SHADERS);
-	if (pFile && pFile->m_bGood) {
-		_MESSAGE("Loaded %s", apFilename);
-		uint32_t uiSize = 0;
+	struct ImageSpaceMessage {
+		BSRenderedTexture* pSource;
+		BSRenderedTexture* pDestination;
+	};
 
-		uiSize = pFile->GetSize();
-		pShaderData = new DWORD[uiSize];
-		bFreeMem = true;
+	enum ShaderLoaderMessages {
+		SL_ShaderRefresh = 0, // Sent on RefreshShaders
+		SL_IS_PreRender  = 1, // Sent pre rendering of EOF image space effects
+		SL_IS_PostRender = 2, // Sent after rendering of EOF image space effects
+	};
 
-		pFile->ReadBuffer(pShaderData, uiSize);
-		delete pFile;
-	}
+	static void CleanupShaderBuffer() {
+		if (bLoadedPackageOnDemand)
+			uiShaderCleanupFrameCounter++;
 
-	if (!pShaderData) {
-		ShaderBuffer* pShaderPkg = BSShaderManager::GetShaderBuffer();
-		if (pShaderPkg) {
-			ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
-			if (pRaw)
-				pShaderData = &pRaw->shader;
-		}
-		else {
-			pShaderPkg = BSShaderManager::CreateShaderBuffer();
-			pShaderPkg->Load(pShaderPkg->pPackagePath);
-			ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
-			if (pRaw)
-				pShaderData = &pRaw->shader;
-			bLoadedPackageOnDemand = true;
+		if (uiShaderCleanupFrameCounter > 360) {
+			BSShaderManager::DestroyShaderBuffer();
+			bLoadedPackageOnDemand = false;
+			uiShaderCleanupFrameCounter = 0;
 		}
 	}
 
-	if (!pShaderData) {
-		if (bFreeMem)
-			delete[] pShaderData;
-
-		_MESSAGE("Failed to find %s", apFilename);
-		return nullptr;
+	static bool EffectOrder(const EOFISEffect& arEffect1, const EOFISEffect& arEffect2) {
+		return arEffect1.uiIndex < arEffect2.uiIndex;
 	}
 
-	NiDX9Renderer* pRenderer = BSShaderManager::GetRenderer();
-	void* pNiShader = aFunc(pShaderData);
-
-	if (bFreeMem)
-		delete[] pShaderData;
-
-	return pNiShader;
-}
-
-// 0xBE0FE0
-NiD3DVertexShader* __fastcall BSShader::CreateVertexShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename) {
-	return (NiD3DVertexShader*)CreateShader(apFilename, [&](DWORD* apShaderData) {
-		LPDIRECT3DVERTEXSHADER9 pShader = nullptr;
-		NiD3DVertexShader* pVertexShader = nullptr;
+	template <typename SHADER_TYPE>
+	void* __fastcall CompileShader(const char* apFilename, DWORD* apShaderData) {
+		using D3D_SHADER = std::conditional_t<std::is_same_v<SHADER_TYPE, NiD3DVertexShader>, LPDIRECT3DVERTEXSHADER9, LPDIRECT3DPIXELSHADER9>;
+		SHADER_TYPE* pNiShader = nullptr;
+		D3D_SHADER pShader = nullptr;
 		NiDX9Renderer* pRenderer = BSShaderManager::GetRenderer();
-		if (SUCCEEDED(pRenderer->GetD3DDevice()->CreateVertexShader(apShaderData, &pShader))) {
-			pVertexShader = NiD3DVertexShader::Create(pRenderer);
-			pVertexShader->SetShaderHandle(pShader);
-			pVertexShader->SetName(apFilename);
+		bool bShaderCreated = false;
+		if constexpr (std::is_nothrow_convertible_v<SHADER_TYPE, NiD3DVertexShader>)
+			bShaderCreated = SUCCEEDED(pRenderer->GetD3DDevice()->CreateVertexShader(apShaderData, &pShader));
+		else if constexpr (std::is_nothrow_convertible_v<SHADER_TYPE, NiD3DPixelShader>)
+			bShaderCreated = SUCCEEDED(pRenderer->GetD3DDevice()->CreatePixelShader(apShaderData, &pShader));
+
+		if (bShaderCreated) {
+			pNiShader = SHADER_TYPE::Create(pRenderer);
+			pNiShader->SetShaderHandle(pShader);
+			pNiShader->SetName(apFilename);
 
 			if (bNVRPresent) {
-				pVertexShader->bEnabled = true;
-				pVertexShader->pShaderHandleBackup = pShader;
+				pNiShader->bEnabled = true;
+				pNiShader->pShaderHandleBackup = pShader;
 			}
 		}
-		return pVertexShader;
-	});
-}
-
-// 0xBE1750
-NiD3DPixelShader* __fastcall BSShader::CreatePixelShaderEx(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename) {
-	return (NiD3DPixelShader*)CreateShader(apFilename, [&](DWORD* apShaderData) {
-		LPDIRECT3DPIXELSHADER9 pShader = nullptr;
-		NiD3DPixelShader* pPixelShader = nullptr;
-		NiDX9Renderer* pRenderer = BSShaderManager::GetRenderer();
-		if (SUCCEEDED(pRenderer->GetD3DDevice()->CreatePixelShader(apShaderData, &pShader))) {
-			pPixelShader = NiD3DPixelShader::Create(pRenderer);
-			pPixelShader->SetShaderHandle(pShader);
-			pPixelShader->SetName(apFilename);
-
-			if (bNVRPresent) {
-				pPixelShader->bEnabled = true;
-				pPixelShader->pShaderHandleBackup = pShader;
-			}
-		}
-		return pPixelShader;
-	});
-}
-
-enum ShaderLoaderMessages {
-	SL_ShaderRefresh = 0, // Sent on RefreshShaders
-	SL_IS_PreRender = 1, // Sent pre rendering of EOF image space effects
-	SL_IS_PostRender = 2, // Sent after rendering of EOF image space effects
-};
-
-static void __cdecl BSShaderManager__ReloadShaders() {
-	ShaderBuffer* pBuffer = BSShaderManager::CreateShaderBuffer();
-	pBuffer->Load(pBuffer->pPackagePath);
-	CdeclCall(bGECK ? 0x8FE4A0 : 0xB557D0);
-	if (pNVSEMessaging) {
-		_MESSAGE("Reloading shaders");
-		pNVSEMessaging->Dispatch(uiPluginHandle, SL_ShaderRefresh, nullptr, 0, nullptr);
+		return pNiShader;
 	}
-	BSShaderManager::DestroyShaderBuffer();
-}
 
-static void CleanupShaderBuffer() {
-	if (bLoadedPackageOnDemand)
-		uiShaderCleanupFrameCounter++;
+	
+	__declspec(noinline) void* __fastcall CreateShader(const char* apFilename, void*(__fastcall* apShaderCompileFunc)(const char*, DWORD*)) {
+		DWORD* pShaderData = nullptr;
+		bool bFreeMem = false;
+		char cPath[MAX_PATH];
+		sprintf_s(cPath, "Data\\Shaders\\Loose\\%s", apFilename);
+		BSFile* pFile = FileFinder::GetFile(cPath, NiFile::READ_ONLY, B_KiB(8), ARCHIVE_TYPE_SHADERS);
+		if (pFile && pFile->m_bGood) {
+			_MESSAGE("Loaded %s", apFilename);
+			uint32_t uiSize = 0;
 
-	if (uiShaderCleanupFrameCounter > 360) {
-		BSShaderManager::DestroyShaderBuffer();
-		bLoadedPackageOnDemand = false;
-		uiShaderCleanupFrameCounter = 0;
-	}
-}
+			uiSize = pFile->GetSize();
+			pShaderData = BSScrapMemory::malloc<DWORD>(uiSize);
+			bFreeMem = true;
 
-class ImageSpaceManagerEx : public ImageSpaceManager {
-public:
-	void RenderEndOfFrameEffects(NiDX9Renderer* apRenderer, BSRenderedTexture*& apSourceBuffer, BSRenderedTexture*& apDestinationBuffer) {
-		if (pNVSEMessaging) {
-			pNVSEMessaging->Dispatch(uiPluginHandle, SL_IS_PreRender, nullptr, 0, nullptr);
+			pFile->ReadBuffer(pShaderData, uiSize);
+			delete pFile;
 		}
 
-		std::vector<ImageSpaceEffect*> kActiveEffects;
-
-		for (int i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
-			for (int j = 0; j < kAdditionalEOFEffects.size(); j++) {
-				auto kAdditionalEffect = kAdditionalEOFEffects.at(j);
-
-				if (kAdditionalEffect.uiIndex >= (i + 1) * uiEOFEffectIndexDivider)
-					break;
-
-				if (kAdditionalEffect.pEffect->IsActive())
-					kActiveEffects.push_back(kAdditionalEffect.pEffect);
-			}
-
-			ImageSpaceEffect* pEffect = GetEffect(i);
-
-			if (pEffect && pEffect->IsActive())
-				kActiveEffects.push_back(pEffect);
-		}
-
-		pEOFDest = apDestinationBuffer;
-
-		if (kActiveEffects.empty()) [[unlikely]] {
-			RenderEffect(IS_SHADER_COPY, apRenderer, apSourceBuffer, apDestinationBuffer, nullptr, true);
-		}
-		else [[likely]] {
-			BSRenderedTexture* pSource = apSourceBuffer;
-			uint32_t uiCount = kActiveEffects.size();
-			BSRenderedTexture* pTarget = nullptr;
-
-			if (uiCount == 1) {
-				pTarget = apDestinationBuffer;
+		if (!pShaderData) {
+			ShaderBuffer* pShaderPkg = BSShaderManager::GetShaderBuffer();
+			if (pShaderPkg) {
+				ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
+				if (pRaw)
+					pShaderData = &pRaw->shader;
 			}
 			else {
-				pTarget = pSwapTarget;
-			}
-
-			for (int32_t i = 0; i < kActiveEffects.size(); ++i) {
-				if (i == kActiveEffects.size() - 1)
-					pTarget = apDestinationBuffer;
-
-				ImageSpaceEffect* pISEffect = kActiveEffects.at(i);
-				RenderEffect(pISEffect, apRenderer, pSource, pTarget, nullptr, true);
-				BSRenderedTexture* pTemp = pSource;
-				pSource = pTarget;
-				pTarget = pTemp;
+				pShaderPkg = BSShaderManager::CreateShaderBuffer();
+				pShaderPkg->Load(pShaderPkg->pPackagePath);
+				ShaderBuffer::RawShader* pRaw = pShaderPkg->GetShader(apFilename);
+				if (pRaw)
+					pShaderData = &pRaw->shader;
+				bLoadedPackageOnDemand = true;
 			}
 		}
 
-		if (pNVSEMessaging) {
-			pNVSEMessaging->Dispatch(uiPluginHandle, SL_IS_PostRender, nullptr, 0, nullptr);
+		if (!pShaderData) {
+			_MESSAGE("Failed to find %s", apFilename);
+			return nullptr;
+		}
+
+		void* pNiShader = apShaderCompileFunc(apFilename, pShaderData);
+
+		if (bFreeMem)
+			BSScrapMemory::free(pShaderData);
+
+		return pNiShader;
+	}
+
+	static void GECKMessageHandler(NVSEMessagingInterface::Message* apMessage) {
+		switch (apMessage->type) {
+			case NVSEMessagingInterface::kMessage_PostPostLoad:
+				// Undo extender's shader buffer destruction patch
+				SafeWrite8(0x9001F8, 0x75);
+				SafeWrite8(0x9002AA, 0x75);
+				break;
 		}
 	}
-};
 
-static void GECKMessageHandler(NVSEMessagingInterface::Message* apMessage) {
-	switch(apMessage->type){
-	case NVSEMessagingInterface::kMessage_PostPostLoad:
-		// Undo extender's shader buffer destruction patch
-		SafeWrite8(0x9001F8, 0x75);
-		SafeWrite8(0x9002AA, 0x75);
-		break;
+	static void GameMessageHandler(NVSEMessagingInterface::Message* apMessage) {
+		switch (apMessage->type) {
+			case NVSEMessagingInterface::kMessage_MainGameLoop:
+				CleanupShaderBuffer();
+				break;
+		}
 	}
 }
 
-static void GameMessageHandler(NVSEMessagingInterface::Message* apMessage) {
-	switch (apMessage->type) {
-	case NVSEMessagingInterface::kMessage_MainGameLoop:
-		CleanupShaderBuffer();
-		break;
-	}
+namespace Hooks {
+	class BSShaderManagerEx : public BSShaderManager {
+	public:
+		static void ReloadShaders() {
+			ShaderBuffer* pBuffer = CreateShaderBuffer();
+			pBuffer->Load(pBuffer->pPackagePath);
+			CdeclCall(bGECK ? 0x8FE4A0 : 0xB557D0);
+			if (pNVSEMessaging) {
+				_MESSAGE("Reloading shaders");
+				pNVSEMessaging->Dispatch(uiPluginHandle, ShaderLoader::SL_ShaderRefresh, nullptr, 0, nullptr);
+			}
+			DestroyShaderBuffer();
+		}
+	};
+
+	class BSShaderEx : public BSShader {
+	public:
+		// 0xBE0FE0
+		static NiD3DVertexShader* __fastcall CreateVertexShader(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename) {
+			return static_cast<NiD3DVertexShader*>(ShaderLoader::CreateShader(apFilename, ShaderLoader::CompileShader<NiD3DVertexShader>));
+		}
+
+		// 0xBE1750
+		static NiD3DPixelShader* __fastcall CreatePixelShader(BSShader* apThis, void*, const char* apPath, D3DXMACRO* apMacro, const char* apShaderVersion, const char* apFilename) {
+			return static_cast<NiD3DPixelShader*>(ShaderLoader::CreateShader(apFilename, ShaderLoader::CompileShader<NiD3DPixelShader>));
+		}
+	};
+
+	class ImageSpaceManagerEx : public ImageSpaceManager {
+	public:
+		void RenderEndOfFrameEffects(NiDX9Renderer* apRenderer, BSRenderedTexture*& apSourceBuffer, BSRenderedTexture*& apDestinationBuffer) {
+			ShaderLoader::ImageSpaceMessage kMessage{ apSourceBuffer, apDestinationBuffer };
+			pNVSEMessaging->Dispatch(uiPluginHandle, ShaderLoader::SL_IS_PreRender, &kMessage, sizeof(kMessage), nullptr);
+
+			eLastEffect = -1;
+			iActiveEffectsCount = 0;
+
+			std::vector<ImageSpaceEffect*, BSScrapAllocator<ImageSpaceEffect*>> kActiveEffects;
+			if (IsEOFEnabled()) [[likely]] {
+				if (ShaderLoader::kAdditionalEOFEffects.empty()) {
+					for (uint32_t i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
+						ImageSpaceEffect* pEffect = GetEffect(i);
+
+						if (pEffect && pEffect->IsActive()) {
+							kActiveEffects.push_back(pEffect);
+							eLastEffect = i;
+						}
+					}
+				}
+				else {
+					for (uint32_t i = IS_EFFECT_BLOOM; i < IS_EFFECT_VOLUMETRIC_FOG; i++) {
+						for (uint32_t j = 0; j < ShaderLoader::kAdditionalEOFEffects.size(); j++) {
+							const auto& rAdditionalEffect = ShaderLoader::kAdditionalEOFEffects.at(j);
+
+							if (rAdditionalEffect.uiIndex >= (i + 1) * ShaderLoader::EOF_EFFECT_INDEX_DIVIDER)
+								break;
+
+							if (rAdditionalEffect.pEffect && rAdditionalEffect.pEffect->IsActive())
+								kActiveEffects.push_back(rAdditionalEffect.pEffect);
+						}
+
+						ImageSpaceEffect* pEffect = GetEffect(i);
+
+						if (pEffect && pEffect->IsActive()) {
+							kActiveEffects.push_back(pEffect);
+							eLastEffect = i;
+						}
+					}
+				}
+
+				iActiveEffectsCount = kActiveEffects.size();
+			}
+
+			pEOFDest = apDestinationBuffer;
+
+			if (kActiveEffects.empty()) [[unlikely]] {
+				RenderEffect(IS_SHADER_COPY, apRenderer, apSourceBuffer, apDestinationBuffer, nullptr, true);
+			}
+			else [[likely]] {
+				const uint32_t uiCount = kActiveEffects.size();
+				BSRenderedTexture* pSource = apSourceBuffer;
+				BSRenderedTexture* pTarget = nullptr;
+				BSRenderedTexture* pSwapRT = nullptr;
+
+				if (uiCount == 1) [[unlikely]]
+					pTarget = apDestinationBuffer;
+				else {
+					pTarget = pSwapTarget;
+					if (uiCount > 2)
+						pSwapRT = BSShaderManager::GetTextureManager()->BorrowRenderedTexture(apRenderer, 3, 0, nullptr, 0);
+				}
+
+				uint32_t uiRenderedEffects = 0;
+				const uint32_t uiEndEffect = uiCount - 1;
+				for (uint32_t i = 0; i <= uiEndEffect; i++) {
+					if (uiRenderedEffects == 1 && pSwapRT)
+						pTarget = pSwapRT;
+					
+					if (i == uiEndEffect)
+						pTarget = apDestinationBuffer;
+
+					ImageSpaceEffect* pISEffect = kActiveEffects.at(i);
+					if (pISEffect && pISEffect->IsActive()) {
+						RenderEffect(pISEffect, apRenderer, pSource, pTarget, nullptr, true);
+						++uiRenderedEffects;
+						BSRenderedTexture* pTemp = pSource;
+						pSource = pTarget;
+						pTarget = pTemp;
+					}
+				}
+
+				if (pSwapRT)
+					BSShaderManager::GetTextureManager()->ReturnRenderedTexture(pSwapRT);
+			}
+
+			pNVSEMessaging->Dispatch(uiPluginHandle, ShaderLoader::SL_IS_PostRender, &kMessage, sizeof(kMessage), nullptr);
+		}
+	};
 }
 
 EXTERN_DLL_EXPORT NiD3DPixelShader* __cdecl CreatePixelShader(const char* apFilename) {
-	return BSShader::CreatePixelShaderEx(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
+	return Hooks::BSShaderEx::CreatePixelShader(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
 }
 
 EXTERN_DLL_EXPORT NiD3DVertexShader* __cdecl CreateVertexShader(const char* apFilename) {
-	return BSShader::CreateVertexShaderEx(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
+	return Hooks::BSShaderEx::CreateVertexShader(nullptr, nullptr, nullptr, nullptr, nullptr, apFilename);
 }
 
 EXTERN_DLL_EXPORT void __cdecl RegisterEOFEffect(uint32_t auiIndex, ImageSpaceEffect* apEffect) {
@@ -241,18 +283,18 @@ EXTERN_DLL_EXPORT void __cdecl RegisterEOFEffect(uint32_t auiIndex, ImageSpaceEf
 
 	_MESSAGE("Register custom EOF effect at index %d", auiIndex);
 
-	EOFISEffect kEffect{ auiIndex, apEffect };
+	ShaderLoader::EOFISEffect kEffect{ auiIndex, apEffect };
 
-	kAdditionalEOFEffects.insert(
-		std::upper_bound(kAdditionalEOFEffects.begin(), kAdditionalEOFEffects.end(), kEffect, EffectOrder),
+	ShaderLoader::kAdditionalEOFEffects.insert(
+		std::upper_bound(ShaderLoader::kAdditionalEOFEffects.begin(), ShaderLoader::kAdditionalEOFEffects.end(), kEffect, ShaderLoader::EffectOrder),
 		kEffect
 	);
 }
 
 EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* info) {
-	info->infoVersion = PluginInfo::kInfoVersion;
-	info->name = "Shader Loader";
-	info->version = 140;
+	info->infoVersion	= PluginInfo::kInfoVersion;
+	info->name			= PLUGIN_NAME;
+	info->version		= PLUGIN_VERSION;
 
 #if SUPPORT_GECK
 	if (nvse)
@@ -267,28 +309,31 @@ EXTERN_DLL_EXPORT bool NVSEPlugin_Query(const NVSEInterface* nvse, PluginInfo* i
 EXTERN_DLL_EXPORT bool NVSEPlugin_Load(NVSEInterface* nvse) {
 	_MESSAGE("Initializing in %s", bGECK ? "GECK" : "Game");
 
-	pNVSEMessaging = (NVSEMessagingInterface*)nvse->QueryInterface(kInterface_Messaging);
+	pNVSEMessaging = reinterpret_cast<NVSEMessagingInterface*>(nvse->QueryInterface(kInterface_Messaging));
 	uiPluginHandle = nvse->GetPluginHandle();
 
 	if (bGECK) {
-		WriteRelJump(0x975910, BSShader::CreateVertexShaderEx);
-		WriteRelJump(0x976080, BSShader::CreatePixelShaderEx);
-		ReplaceCall(0x44E92F, BSShaderManager__ReloadShaders);
+		WriteRelJump(0x975910, Hooks::BSShaderEx::CreateVertexShader);
+		WriteRelJump(0x976080, Hooks::BSShaderEx::CreatePixelShader);
 
-		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", GECKMessageHandler);
+		ReplaceCall(0x44E92F, Hooks::BSShaderManagerEx::ReloadShaders);
+
+		WriteRelJumpEx(0x91EFF0, &Hooks::ImageSpaceManagerEx::RenderEndOfFrameEffects);
+
+		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", ShaderLoader::GECKMessageHandler);
 	}
 	else {
-		bNVRPresent = GetModuleHandle("NewVegasReloaded.dll") != nullptr;
+		ShaderLoader::bNVRPresent = GetModuleHandle("NewVegasReloaded.dll") != nullptr;
 
-		WriteRelJump(0xBE0FE0, BSShader::CreateVertexShaderEx);
-		WriteRelJump(0xBE1750, BSShader::CreatePixelShaderEx);
+		WriteRelJump(0xBE0FE0, Hooks::BSShaderEx::CreateVertexShader);
+		WriteRelJump(0xBE1750, Hooks::BSShaderEx::CreatePixelShader);
 
 		for (uint32_t uiAddr : {0x5BF43C, 0x5C5A39})
-			ReplaceCall(uiAddr, BSShaderManager__ReloadShaders);
+			ReplaceCall(uiAddr, Hooks::BSShaderManagerEx::ReloadShaders);
 
-		WriteRelJumpEx(0xB97900, &ImageSpaceManagerEx::RenderEndOfFrameEffects);
-
-		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", GameMessageHandler);
+		WriteRelJumpEx(0xB97900, &Hooks::ImageSpaceManagerEx::RenderEndOfFrameEffects);
+		
+		pNVSEMessaging->RegisterListener(uiPluginHandle, "NVSE", ShaderLoader::GameMessageHandler);
 	}
 
 	return true;
@@ -300,5 +345,7 @@ BOOL WINAPI DllMain(
 	LPVOID  lpreserved
 )
 {
+	if (dwReason == DLL_PROCESS_ATTACH)
+		DisableThreadLibraryCalls(static_cast<HMODULE>(hDllHandle));
 	return TRUE;
 }
